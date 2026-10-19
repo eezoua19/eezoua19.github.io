@@ -6,7 +6,24 @@
   "question": "Tu veux qu'on se voie ?",
   "mood": "cerise",
   "whatsapp": "",
-  "activities": ["🍿 Ciné", "🍜 Resto", "🌙 Balade le soir", "🧺 Pique-nique", "🎳 Bowling", "🛋️ Soirée film à la maison"],
-  "slots": ["Vendredi soir", "Samedi après-midi", "Samedi soir", "Dimanche"],
-  "confirmed": { "what": "", "when": "", "where": "" }
+  "music": "",
+  "activities": [
+    "🍿 Ciné",
+    "🍜 Resto",
+    "🌙 Balade le soir",
+    "🧺 Pique-nique",
+    "🎳 Bowling",
+    "🛋️ Soirée film à la maison"
+  ],
+  "slots": [
+    "Vendredi soir",
+    "Samedi après-midi",
+    "Samedi soir",
+    "Dimanche"
+  ],
+  "confirmed": {
+    "what": "",
+    "when": "",
+    "where": ""
+  }
 }

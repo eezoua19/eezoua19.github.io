@@ -250,6 +250,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .dbody:not([hidden]) { animation: rise .35s var(--ease-out) both; }
 .reply { animation: rise .45s var(--ease-out) both; }
 .toast { transition: opacity .3s ease, transform .45s var(--ease-spring); }
+
+/* Music button */
+.music-btn { position: fixed; left: calc(16px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  display: inline-flex; align-items: center; gap: 8px; border: 1.5px solid var(--line); background: var(--paper); color: var(--ink);
+  border-radius: 999px; padding: 8px 14px; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: var(--shadow); animation: rise .5s var(--ease-out) both; }
+.eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
+.eq i { width: 3px; height: 100%; background: var(--accent); border-radius: 2px; transform-origin: bottom; transform: scaleY(.3); }
+.music-btn[aria-pressed="true"] .eq i { animation: eq .9s ease-in-out infinite; }
+.music-btn .eq i:nth-child(2) { animation-delay: -.3s; }
+.music-btn .eq i:nth-child(3) { animation-delay: -.6s; }
+@keyframes eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
 </style>
 
 <canvas id="hearts" aria-hidden="true"></canvas>
@@ -370,6 +381,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   </div>
 </aside>
 
+<button class="music-btn" id="musicBtn" type="button" aria-pressed="false" hidden><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span id="musicLabel">Musique</span></button>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -496,9 +508,72 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   hype.addEventListener("input", () => { const t = hypeText(+hype.value); if (t !== hype._t) { hype._t = t; pop($("#hypeLabel")); } });
   ["#idea", "#slotCustom", "#note"].forEach((s) => $(s).addEventListener("input", typing));
 
+  // Music: a little music box synthesized live (no file needed); an MP3 can replace it
+  const Music = (() => {
+    let ctx = null, master = null, timer = 0, step = 0, nextT = 0, audio = null, playing = false, src = "";
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    const CHORDS = [[48, 55, 60, 64], [43, 50, 55, 59], [45, 52, 57, 60], [41, 48, 53, 57]]; // C – G – Am – F
+    const ARP = [0, 1, 2, 3, 2, 1, 2, 3];
+    const MELODY = [76, 0, 79, 76, 74, 0, 72, 74, 76, 0, 72, 0, 69, 72, 74, 0, 72, 0, 69, 67, 69, 0, 72, 74, 72, 0, 0, 0, 69, 67, 65, 67];
+    const btn = document.querySelector("#musicBtn");
+    function init() {
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain(); master.gain.value = 0;
+      const delay = ctx.createDelay(), fb = ctx.createGain(), wet = ctx.createGain();
+      delay.delayTime.value = .33; fb.gain.value = .3; wet.gain.value = .3;
+      master.connect(ctx.destination); master.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(ctx.destination);
+    }
+    function voice(f, t, dur, gain, type) {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + .012); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + .05);
+    }
+    function schedule() {
+      const eighth = 60 / 80 / 2;
+      while (nextT < ctx.currentTime + .3) {
+        const ch = CHORDS[Math.floor(step / 8) % 4], i = step % 8, m = MELODY[step % 32];
+        voice(hz(ch[ARP[i]] + 12), nextT, 1.1, .045, "triangle");
+        if (i === 0) voice(hz(ch[0] - 12), nextT, 2.6, .07, "sine");
+        if (m) { voice(hz(m), nextT, 1.5, .09, "sine"); voice(hz(m) * 2, nextT, .5, .012, "sine"); }
+        nextT += eighth; step++;
+      }
+    }
+    function synth() {
+      if (!ctx) init();
+      ctx.resume();
+      const t = ctx.currentTime;
+      master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.linearRampToValueAtTime(.9, t + 1.5);
+      nextT = t + .08; clearInterval(timer); schedule(); timer = setInterval(schedule, 90);
+    }
+    function ui() { btn.hidden = false; btn.setAttribute("aria-pressed", playing); document.querySelector("#musicLabel").textContent = playing ? "Couper la musique" : "Remettre la musique"; }
+    function start(file) {
+      if (playing) return;
+      playing = true; if (file !== undefined) src = file || ""; ui();
+      if (src) {
+        if (!audio || audio._src !== src) { if (audio) audio.pause(); audio = new Audio(src); audio._src = src; audio.loop = true; }
+        audio.volume = 0;
+        audio.play().then(() => { const f = setInterval(() => { audio.volume = Math.min(.85, audio.volume + .05); if (audio.volume >= .85) clearInterval(f); }, 80); })
+          .catch(() => { src = ""; audio = null; synth(); });
+        return;
+      }
+      synth();
+    }
+    function stop() {
+      playing = false; ui();
+      if (audio && src) { audio.pause(); return; }
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      master.gain.cancelScheduledValues(t); master.gain.setValueAtTime(master.gain.value, t); master.gain.linearRampToValueAtTime(0, t + .6);
+      setTimeout(() => { if (!playing) clearInterval(timer); }, 700);
+    }
+    btn.addEventListener("click", () => (playing ? stop() : start()));
+    return { start, stop };
+  })();
+
   // Yes / No
   $("#yesBtn").addEventListener("click", (e) => {
-    saidYes = true; const r = e.currentTarget.getBoundingClientRect();
+    saidYes = true; Music.start(); const r = e.currentTarget.getBoundingClientRect();
     hearts(60, r.left + r.width / 2, r.top);
     $("#yesno").innerHTML = `<p class="said-yes">Yesss ! Alors dis-moi tout juste en dessous ↓</p>`;
     setTimeout(() => $("#form").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 500);
