@@ -391,7 +391,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     <label class="toggle"><input type="checkbox" id="remember" checked> Rester connecté sur cet appareil</label>
     <button class="btn" type="submit" id="loginBtn">Se connecter</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
-    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 15</span>
+    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 25</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
@@ -411,7 +411,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     </div>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
-    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 15. Si tu vois une autre date, recharge la page.</p>
+    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 25. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
     <p class="hint" style="margin:0" id="inboxHint"></p>
@@ -570,6 +570,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       }
     }
     function synth() {
+      if (!recording) setAudioSession("playback"); // sinon l'iPhone en mode silencieux coupe la boîte à musique
       if (!ctx) init();
       ctx.resume();
       const t = ctx.currentTime;
@@ -655,44 +656,82 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     if (!r.ok) throw new Error("ntfy " + r.status);
   }
 
-  // Enregistrement du vocal
+  // Enregistrement du vocal : capté en direct et rangé en WAV, un format que tous les téléphones lisent (iPhone compris)
   const fmt = (sec) => Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0");
-  let rec = null, recStream = null, chunks = [], voiceBlob = null, voiceDur = 0, recStart = 0, recTimer = 0;
-  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)) $("#voiceQ").hidden = true;
-  function recType() {
-    for (const t of ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"]) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
-    return "";
+  const VOICE_RATE = 16000;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const inApp = /FBAN|FBAV|Instagram|Snapchat|TikTok|Line\//i.test(navigator.userAgent);
+  let recCtx = null, recSrc = null, recProc = null, recStream = null, pcm = [], recording = false;
+  let voiceBlob = null, voiceDur = 0, recStart = 0, recTimer = 0;
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && AC)) {
+    $("#recBtn").hidden = true;
+    $("#voiceHint").textContent = inApp ? "Pour m'envoyer un vocal, ouvre ce lien dans Safari ou Chrome." : "Ce navigateur ne permet pas d'enregistrer un vocal : écris ton mot juste au-dessus.";
+  }
+  function setAudioSession(type) { try { if (navigator.audioSession) navigator.audioSession.type = type; } catch {} }
+  function toWav(chunks, inRate, outRate) {
+    const len = chunks.reduce((n, c) => n + c.length, 0), all = new Float32Array(len);
+    let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+    let peak = 0; for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(all[i]));
+    const gain = peak > 0.01 ? Math.min(4, 0.9 / peak) : 1; // remonte un peu les vocaux trop faibles
+    const ratio = inRate / outRate, outLen = Math.floor(len / ratio), out = new Int16Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const st = Math.floor(i * ratio), en = Math.max(st + 1, Math.min(len, Math.floor((i + 1) * ratio)));
+      let sum = 0; for (let j = st; j < en; j++) sum += all[j];
+      const v = Math.max(-1, Math.min(1, (sum / (en - st)) * gain));
+      out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+    }
+    const buf = new ArrayBuffer(44 + out.length * 2), dv = new DataView(buf);
+    const w = (at, str) => { for (let i = 0; i < str.length; i++) dv.setUint8(at + i, str.charCodeAt(i)); };
+    w(0, "RIFF"); dv.setUint32(4, 36 + out.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+    dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, outRate, true);
+    dv.setUint32(28, outRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, "data"); dv.setUint32(40, out.length * 2, true);
+    new Int16Array(buf, 44).set(out);
+    return { blob: new Blob([buf], { type: "audio/wav" }), dur: outLen / outRate };
   }
   function recUi(on) {
     $("#recBtn").classList.toggle("recording", on); $("#recTime").hidden = !on;
     $("#recLabel").textContent = on ? "Arrêter" : voiceBlob ? "Réenregistrer" : "Enregistrer un vocal";
   }
   async function startRec() {
-    try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    catch { $("#voiceHint").textContent = "Le micro n'est pas autorisé. Autorise-le dans ton navigateur, ou écris ton mot juste au-dessus."; return; }
+    recCtx = new AC(); // créé pendant le toucher : l'iPhone l'exige
+    setAudioSession("play-and-record");
+    try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } }); }
+    catch {
+      recCtx.close(); recCtx = null; setAudioSession("auto");
+      $("#voiceHint").textContent = inApp ? "Le micro n'est pas disponible ici : ouvre ce lien dans Safari ou Chrome." : "Le micro n'est pas autorisé. Autorise-le dans les réglages du navigateur (sur iPhone : Réglages › Safari › Micro), ou écris ton mot juste au-dessus.";
+      return;
+    }
     Music.stop();
-    const type = recType(); chunks = [];
-    rec = new MediaRecorder(recStream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-    rec.onstop = () => {
-      recStream.getTracks().forEach((t) => t.stop());
-      voiceDur = Math.max(1, Math.round((Date.now() - recStart) / 1000));
-      voiceBlob = new Blob(chunks, { type: (rec.mimeType || type || "audio/webm").split(";")[0] });
-      const a = $("#voiceAudio"); if (a.src) URL.revokeObjectURL(a.src); a.src = URL.createObjectURL(voiceBlob);
-      $("#voicePreview").hidden = false; recUi(false);
-      $("#voiceHint").textContent = "Vocal de " + fmt(voiceDur) + " prêt. Écoute-le, puis envoie ta réponse.";
-    };
-    rec.start(250); recStart = Date.now(); $("#recTime").textContent = "0:00"; recUi(true);
+    await recCtx.resume();
+    recSrc = recCtx.createMediaStreamSource(recStream);
+    recProc = recCtx.createScriptProcessor(4096, 1, 1);
+    const mute = recCtx.createGain(); mute.gain.value = 0;
+    pcm = [];
+    recProc.onaudioprocess = (e) => { if (recording) pcm.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    recSrc.connect(recProc); recProc.connect(mute); mute.connect(recCtx.destination);
+    recording = true; recStart = Date.now(); $("#recTime").textContent = "0:00"; recUi(true);
     $("#voiceHint").textContent = "Ça enregistre… parle-moi.";
     recTimer = setInterval(() => { const sec = (Date.now() - recStart) / 1000; $("#recTime").textContent = fmt(sec); if (sec >= 60) stopRec(); }, 250);
   }
-  function stopRec() { clearInterval(recTimer); if (rec && rec.state !== "inactive") rec.stop(); }
+  function stopRec() {
+    if (!recording) return;
+    recording = false; clearInterval(recTimer);
+    recStream.getTracks().forEach((t) => t.stop());
+    try { recSrc.disconnect(); recProc.disconnect(); } catch {}
+    const rate = recCtx.sampleRate; recCtx.close(); recCtx = null; setAudioSession("auto");
+    if (!pcm.length) { recUi(false); $("#voiceHint").textContent = "Aucun son capté. Vérifie ton micro et réessaie."; return; }
+    const wav = toWav(pcm, rate, VOICE_RATE); pcm = [];
+    voiceBlob = wav.blob; voiceDur = Math.max(1, Math.round(wav.dur));
+    const a = $("#voiceAudio"); if (a.src) URL.revokeObjectURL(a.src); a.src = URL.createObjectURL(voiceBlob);
+    $("#voicePreview").hidden = false; recUi(false);
+    $("#voiceHint").textContent = "Vocal de " + fmt(voiceDur) + " prêt. Écoute-le, puis envoie ta réponse.";
+  }
   function clearVoice() {
     voiceBlob = null; voiceDur = 0; $("#voicePreview").hidden = true;
     const a = $("#voiceAudio"); if (a.src) URL.revokeObjectURL(a.src); a.removeAttribute("src");
     recUi(false); $("#voiceHint").textContent = "Jusqu'à 1 minute. Seul lui pourra l'écouter.";
   }
-  $("#recBtn").addEventListener("click", () => (rec && rec.state === "recording" ? stopRec() : startRec()));
+  $("#recBtn").addEventListener("click", () => (recording ? stopRec() : startRec()));
   $("#voiceDel").addEventListener("click", clearVoice);
   function replyText(d) {
     const lines = ["💌 Réponse au billet de rendez-vous", "Oui ✅"];
@@ -711,12 +750,12 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       saidYes: true, activities: [...sel.acts].map((i) => cfg.activities[i]).filter(Boolean), idea: $("#idea").value.trim(),
       slot: sel.slot != null ? cfg.slots[sel.slot] || "" : "", slotCustom: $("#slotCustom").value.trim(), hype: +hype.value, note: $("#note").value.trim(), at: Date.now(),
     };
-    if (rec && rec.state === "recording") { toast("Arrête d'abord l'enregistrement du vocal"); return; }
+    if (recording) { toast("Arrête d'abord l'enregistrement du vocal"); return; }
     if (!d.activities.length && !d.idea && !d.slot && !d.slotCustom && !d.note && !voiceBlob) { toast("Choisis au moins une activité, un moment, écris un mot ou laisse un vocal"); return; }
     d.hasVoice = !!voiceBlob;
     const btn = $("#sendBtn"), text = replyText(d), num = String(cfg.whatsapp || "").replace(/[^\d]/g, "");
     const wa = num ? "https://wa.me/" + num + "?text=" + encodeURIComponent(text) : "";
-    btn.disabled = true; btn.textContent = "Envoi…";
+    btn.disabled = true; btn.textContent = voiceBlob ? "Envoi du vocal…" : "Envoi…";
     try {
       await postReply({ ...d }, voiceBlob ? { blob: voiceBlob, dur: voiceDur } : null);
       clearVoice();
@@ -888,8 +927,17 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       try {
         const res = await fetch(src.url, src.opt || {}); if (!res.ok) continue;
         const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(v.iv) }, key, await res.arrayBuffer());
-        const a = document.createElement("audio"); a.controls = true; a.src = URL.createObjectURL(new Blob([plain], { type: v.type || "audio/webm" }));
-        btn.replaceWith(a); a.play().catch(() => {}); return;
+        const type = v.type || "audio/webm", a = document.createElement("audio");
+        a.controls = true; a.preload = "auto"; a.setAttribute("playsinline", "");
+        let blob = new Blob([plain], { type });
+        if (type !== "audio/wav" && !a.canPlayType(type)) {
+          try { // ancien vocal (webm) sur iPhone : on le convertit en WAV
+            const dc = new AC(), buf = await dc.decodeAudioData(plain.slice(0)); dc.close();
+            blob = toWav([buf.getChannelData(0)], buf.sampleRate, VOICE_RATE).blob;
+          } catch { btn.disabled = false; btn.textContent = "Ce vocal ne se lit pas sur ce téléphone : écoute-le sur un ordinateur"; return; }
+        }
+        a.src = URL.createObjectURL(blob);
+        btn.replaceWith(a); a.play().catch(() => toast("Appuie sur ▶ pour écouter")); return;
       } catch {}
     }
     btn.disabled = false; btn.textContent = "Vocal pas encore disponible : réessaie dans quelques minutes";
