@@ -1,0 +1,12 @@
+{
+  "fromName": "Moi",
+  "toName": "Mon cœur",
+  "title": "Toi + moi, bientôt ?",
+  "intro": "Ça fait trop longtemps que je ne t'ai pas vue…\nAlors j'ai préparé ce petit billet rien que pour toi.",
+  "question": "Tu veux qu'on se voie ?",
+  "mood": "cerise",
+  "whatsapp": "",
+  "activities": ["🍿 Ciné", "🍜 Resto", "🌙 Balade le soir", "🧺 Pique-nique", "🎳 Bowling", "🛋️ Soirée film à la maison"],
+  "slots": ["Vendredi soir", "Samedi après-midi", "Samedi soir", "Dimanche"],
+  "confirmed": { "what": "", "when": "", "where": "" }
+}

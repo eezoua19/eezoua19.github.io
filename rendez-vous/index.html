@@ -109,7 +109,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
 .btn.ghost { background: transparent; color: var(--ink); border: 2px solid var(--line); }
 .btn.small { padding: 7px 14px; font-size: 14px; }
-#noBtn { transition: transform .25s cubic-bezier(.3,1.6,.5,1); }
+#noBtn { transition: transform .25s cubic-bezier(.3,1.6,.5,1); touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+#yesBtn { transition: transform .25s ease, filter .15s; }
 .said-yes { font-family: var(--f-hand); font-size: 28px; color: var(--accent); }
 
 /* Answer form */
@@ -296,7 +297,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <label class="af"><span>Ton message</span><textarea class="field hand" id="a_intro" maxlength="800"></textarea></label>
     <label class="af"><span>La question</span><input class="field" id="a_question" maxlength="100"></label>
     <div class="af"><span>Ambiance</span><div class="swatches" id="a_moods"></div></div>
-    <label class="toggle"><input type="checkbox" id="a_flee"> Le bouton « Non » s'enfuit</label>
     <div class="divider"></div>
     <div class="af"><span>Activités proposées</span><div id="a_acts" class="af"></div>
       <button class="btn ghost small" id="addAct" type="button">+ Ajouter une activité</button></div>
@@ -426,22 +426,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     setTimeout(() => $("#form").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 500);
   });
   const noBtn = $("#noBtn");
-  function flee() {
-    if (!cfg || !cfg.flee) return;
+  const TEASE = ["Non", "T'es sûre ?", "Raté !", "Essaie encore", "Impossible", "Appuie sur Oui", "Non n'existe pas", "Trop lente !"];
+  function flee(e) {
+    if (e) e.preventDefault();
     noTries++;
-    if (noTries >= 6) { noBtn.textContent = "Bon d'accord… Oui"; noBtn.style.transform = ""; return; }
+    noBtn.textContent = TEASE[noTries % TEASE.length];
     const box = $("#yesno").getBoundingClientRect();
-    const dx = (Math.random() - .5) * Math.min(box.width - 80, 360), dy = (Math.random() - .5) * 90;
+    const dx = (Math.random() - .5) * Math.min(box.width - 60, 420), dy = (Math.random() - .5) * 110;
     noBtn.style.transform = `translate(${dx}px, ${dy}px) rotate(${(Math.random() - .5) * 30}deg)`;
+    $("#yesBtn").style.transform = `scale(${Math.min(1 + noTries * .08, 1.6)})`;
   }
   noBtn.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") flee(); });
-  noBtn.addEventListener("click", (e) => {
-    if (cfg && cfg.flee && noTries < 6) { flee(); return; }
-    if (noTries >= 6 || (cfg && !cfg.flee)) {
-      if (cfg && !cfg.flee && noTries < 6) { toast("Dommage… dis-moi pourquoi dans le petit mot"); return; }
-      $("#yesBtn").click();
-    }
-  });
+  noBtn.addEventListener("pointerdown", flee);
+  noBtn.addEventListener("click", flee);
+  noBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") flee(e); });
 
   // Send
   $("#form").addEventListener("submit", async (e) => {
@@ -510,7 +508,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const set = (id, v) => { const el = $(id); if (el !== document.activeElement) el.value = v ?? ""; };
     set("#a_from", draft.fromName); set("#a_to", draft.toName); set("#a_title", draft.title);
     set("#a_intro", draft.intro); set("#a_question", draft.question);
-    $("#a_flee").checked = !!draft.flee;
     $("#a_moods").innerHTML = Object.entries(MOODS).map(([k, c]) => `<button type="button" class="sw" title="${k}" aria-label="${k}" data-mood="${k}" style="background:${c}" aria-pressed="${(draft.mood || "cerise") === k}"></button>`).join("");
     if (!drawerFocused()) { listEditor("#a_acts", draft.activities || [], true); listEditor("#a_slots", draft.slots || [], false); }
     const p = draft.confirmed || {};
@@ -539,7 +536,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   $("#addSlot").addEventListener("click", () => { const l = [...(draft.slots || []), { id: uid(), label: "" }]; updateDraft({ slots: l }); listEditor("#a_slots", l, false); $("#a_slots .row:last-child input").focus(); });
   [["#a_from", "fromName"], ["#a_to", "toName"], ["#a_title", "title"], ["#a_intro", "intro"], ["#a_question", "question"]].forEach(([id, k]) =>
     $(id).addEventListener("input", (e) => updateDraft({ [k]: e.target.value })));
-  $("#a_flee").addEventListener("change", (e) => updateDraft({ flee: e.target.checked }));
   $("#a_moods").addEventListener("click", (e) => { const b = e.target.closest(".sw"); if (!b) return; updateDraft({ mood: b.dataset.mood }); fillAdmin(); });
   $("#p_confirm").addEventListener("click", () => {
     const what = $("#p_what").value.trim(); if (!what) { toast("Écris d'abord ce que vous faites"); return; }
