@@ -33,8 +33,14 @@
     "0ruWs3Z9AsGq",
     "w6cnmllvXHZp",
     "WIPhPkSj6uKF",
-    "BJw3IVBRoBjM"
+    "BJw3IVBRoBjM",
+    "CKL4P6XqiDEY"
   ],
-  "updatedAt": 1792391998708,
-  "invites": {}
+  "updatedAt": 1792407455386,
+  "invites": {
+    "785baa": {
+      "deleted": true,
+      "updatedAt": 1792407445327
+    }
+  }
 }
