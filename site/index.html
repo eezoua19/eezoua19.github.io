@@ -273,6 +273,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --warn: #f2b14c; } }
 :root[data-theme="dark"] { --warn: #f2b14c; }
 .lockbox { flex: none; }
+.adm-sec a { color: var(--accent); font-weight: 600; }
 .adm-sec { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
 .adm-sec h4 { margin: 0; font-family: var(--f-display); font-size: 17px; }
 .adm-sec .field { background: var(--paper); }
@@ -368,6 +369,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       <input class="field" id="lockCode" type="password" autocomplete="current-password" placeholder="Entre ton code"></label>
     <button class="btn" type="submit">Déverrouiller</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
+    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 00 h 50</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
@@ -387,6 +389,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     </div>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
+    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 00 h 50. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
     <p class="hint" style="margin:0" id="inboxHint"></p>
@@ -869,6 +872,20 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   const b64 = (t) => { let bin = ""; new TextEncoder().encode(t).forEach((b) => (bin += String.fromCharCode(b))); return btoa(bin); };
   const gh = (url, opt = {}) => fetch(url, { ...opt, cache: "no-store", headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", ...(opt.headers || {}) } });
   async function getSha() { const r = await gh(API); if (!r.ok) throw r; return (await r.json()).sha; }
+  const TOKEN_URL = "https://github.com/settings/personal-access-tokens";
+  function tokenProblem(status) {
+    if (status === 401) return "GitHub dit que ce jeton n'est pas valide : il est mal copié, expiré ou supprimé. Crée-en un nouveau.";
+    if (status === 403) return "Ce jeton peut lire le dépôt mais pas écrire dedans. Sur GitHub, modifie le jeton : Repository permissions → Contents → Read and write.";
+    if (status === 404) return "Ce jeton n'a pas accès au dépôt eezoua19.github.io. Sur GitHub, modifie le jeton : Repository access → Only select repositories → eezoua19.github.io.";
+    return "GitHub a répondu une erreur (" + status + "). Réessaie dans un instant.";
+  }
+  function dropToken(status) {
+    token = ""; fileSha = null; try { localStorage.removeItem("rdv-gh"); } catch {}
+    $("#ghToken").value = ""; ghUi(); setSave("Jeton refusé par GitHub", "warn");
+    $("#ghHint").innerHTML = `<b>Jeton refusé.</b> ${esc(tokenProblem(status))} <a href="${TOKEN_URL}" target="_blank" rel="noopener">Ouvrir mes jetons GitHub</a>, puis recolle le jeton ici.`;
+    if (unlocked) { selectTab("edit"); $("#ghSec").scrollIntoView({ behavior: "smooth", block: "start" }); }
+    renderDash();
+  }
   async function push() {
     if (!token) { setSave("Aperçu seulement : GitHub non connecté", "warn"); return; }
     if (saving) { dirty = true; return; }
@@ -882,12 +899,12 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
         const r = await gh(API, { method: "PUT", body: JSON.stringify({ message: "Admin : mise à jour du billet", content: b64(text), sha: fileSha }) });
         if (r.ok) { fileSha = (await r.json()).content.sha; lastText = text; done = true; setSave("En ligne ✓ " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })); }
         else if (r.status === 409 || r.status === 422) fileSha = null;
-        else if (r.status === 401 || r.status === 403 || r.status === 404) { setSave("Jeton refusé : reconnecte GitHub en haut du panneau"); done = true; }
+        else if (r.status === 401 || r.status === 403 || r.status === 404) { dropToken(r.status); done = true; }
         else throw r;
       }
       if (!done) dirty = true;
     } catch (e) {
-      if (e && (e.status === 401 || e.status === 403 || e.status === 404)) setSave("Jeton refusé : reconnecte GitHub en haut du panneau");
+      if (e && (e.status === 401 || e.status === 403 || e.status === 404)) dropToken(e.status);
       else { setSave("Connexion perdue, nouvel essai…"); dirty = true; }
     } finally { saving = false; if (dirty) { clearTimeout(saveT); saveT = setTimeout(push, 2500); } }
   }
@@ -913,10 +930,16 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const t = $("#ghToken").value.trim(); if (!t) { toast("Colle d'abord ton jeton"); return; }
     token = t; setSave("Vérification du jeton…");
     try {
-      fileSha = await getSha();
+      const g = await gh(API);
+      if (!g.ok) { dropToken(g.status); return; }
+      const j = await g.json();
+      // Test d'écriture : on réenregistre la config telle quelle pour vérifier le droit d'écrire
+      const w = await gh(API, { method: "PUT", body: JSON.stringify({ message: "Admin : connexion de l'admin", content: j.content.replace(/\s/g, ""), sha: j.sha }) });
+      if (!w.ok) { dropToken(w.status); return; }
+      fileSha = (await w.json()).content.sha;
       try { localStorage.setItem("rdv-gh", t); } catch {}
-      $("#ghToken").value = ""; ghUi(); setSave("Connecté ✓"); toast("GitHub connecté"); if (privKey) syncInbox();
-    } catch { token = ""; setSave("Ce jeton ne marche pas : vérifie qu'il a l'accès « Contents : Read and write » sur ce dépôt"); }
+      $("#ghToken").value = ""; ghUi(); setSave("Connecté ✓"); toast("GitHub connecté : tout est enregistré automatiquement"); renderDash(); if (privKey) syncInbox();
+    } catch { token = ""; ghUi(); setSave("Pas de connexion internet, réessaie", "warn"); }
   });
   $("#ghForget").addEventListener("click", () => { token = ""; fileSha = null; try { localStorage.removeItem("rdv-gh"); } catch {} ghUi(); setSave("Jeton oublié sur cet appareil"); });
   $("#lock").addEventListener("submit", async (e) => {
