@@ -201,6 +201,55 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #hearts { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* ---------- Motion: transform/opacity only, so it stays smooth on phones ---------- */
+:root { --ease-out: cubic-bezier(.22, 1, .36, 1); --ease-spring: cubic-bezier(.34, 1.56, .64, 1); }
+@keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes beat { 0%, 100% { transform: scale(1); } 10% { transform: scale(1.07); } 20% { transform: scale(1); } 30% { transform: scale(1.05); } 42% { transform: scale(1); } }
+@keyframes stamp { from { opacity: 0; transform: scale(1.3) rotate(-5deg); } to { opacity: 1; transform: none; } }
+@keyframes flip { from { opacity: .25; transform: translateY(-40%); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes shine { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(320%) skewX(-20deg); } }
+
+.ticket, .card, .plan, .live { animation: rise .7s var(--ease-out) both; }
+.live { animation-delay: .05s; }
+.stub { animation: fade .6s ease both .1s; }
+.hero > * { animation: rise .7s var(--ease-out) both; }
+.hero > :nth-child(1) { animation-delay: .18s; }
+.hero > :nth-child(2) { animation-delay: .28s; }
+.hero > :nth-child(3) { animation-delay: .4s; }
+.ask h2 { animation: rise .7s var(--ease-out) .5s both; }
+.yesno { animation: rise .7s var(--ease-out) .6s both; }
+.card { animation-delay: .35s; }
+.plan { position: relative; overflow: hidden; }
+.plan::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 35%; background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--accent-ink) 22%, transparent), transparent); animation: shine 1.4s var(--ease-out) .8s both; pointer-events: none; }
+
+.btn { transition: transform .25s var(--ease-spring), filter .2s, scale .35s var(--ease-spring); will-change: transform; }
+.btn:active { transform: scale(.95); }
+#yesBtn { animation: beat 2.6s ease-in-out 1.6s infinite; transition: scale .35s var(--ease-spring), filter .2s; }
+#yesBtn:hover { animation-play-state: paused; }
+#noBtn { transition: transform .32s var(--ease-spring); }
+.said-yes { animation: stamp .55s var(--ease-spring) both; }
+
+.chip { transition: background .2s, border-color .2s, color .2s, transform .3s var(--ease-spring), box-shadow .2s; }
+.chip:hover { transform: translateY(-2px); box-shadow: 0 6px 14px -8px color-mix(in oklab, var(--accent) 70%, transparent); }
+.chip:active { transform: scale(.95); }
+.popped { animation: pop .38s var(--ease-spring); }
+.stagger > * { animation: rise .5s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 45ms + .45s); }
+.field { transition: border-color .2s, box-shadow .2s; }
+.field:focus { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 16%, transparent); outline: none; }
+.hype { display: inline-block; transform-origin: left center; }
+.count b.flip { animation: flip .45s var(--ease-out); }
+
+.scrim { position: fixed; inset: 0; z-index: 35; background: color-mix(in oklab, var(--ink) 35%, transparent); opacity: 0; pointer-events: none; transition: opacity .35s ease; }
+.scrim.show { opacity: 1; pointer-events: auto; }
+.drawer { transition: transform .5s var(--ease-out); }
+.fab { transition: transform .25s var(--ease-spring), opacity .2s; }
+.fab:hover { transform: translateY(-2px); opacity: 1 !important; }
+.dbody:not([hidden]) { animation: rise .35s var(--ease-out) both; }
+.reply { animation: rise .45s var(--ease-out) both; }
+.toast { transition: opacity .3s ease, transform .45s var(--ease-spring); }
 </style>
 
 <canvas id="hearts" aria-hidden="true"></canvas>
@@ -274,6 +323,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 <button class="fab" id="fab" type="button" hidden>Admin <span class="badge" id="fabBadge" hidden></span></button>
 
+<div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Administration" aria-hidden="true">
   <div class="dhead">
     <div><h3>Admin</h3><div class="save-state" id="saveState">Tout est enregistré</div></div>
@@ -344,6 +394,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   /* ---------- Hearts ---------- */
+  // Small animation helpers
+  function pop(el) { if (!el) return; el.classList.remove("popped"); void el.offsetWidth; el.classList.add("popped"); }
+  document.addEventListener("animationend", (e) => { if (e.animationName === "pop") e.target.classList.remove("popped"); if (e.animationName === "flip") e.target.classList.remove("flip"); });
+  function staggerOnce() {
+    if (staggerOnce.done || !document.querySelector("#acts").children.length) return;
+    staggerOnce.done = true;
+    ["#acts", "#slots"].forEach((s) => {
+      const box = document.querySelector(s); box.classList.add("stagger");
+      [...box.children].forEach((c, i) => c.style.setProperty("--i", i));
+      setTimeout(() => box.classList.remove("stagger"), 1600);
+    });
+  }
+  function flipChanged(el) {
+    const now = [...el.querySelectorAll("b")].map((b) => b.textContent);
+    el.querySelectorAll("b").forEach((b, i) => { if (el._prev && el._prev[i] !== now[i]) b.classList.add("flip"); });
+    el._prev = now;
+  }
+
   const cv = $("#hearts"), cx = cv.getContext("2d"); let parts = [], raf = 0;
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   function hearts(n = 40, x = innerWidth / 2, y = innerHeight / 2) {
@@ -353,11 +421,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (!raf) loop();
   }
   function heart(x, y, s) { cx.beginPath(); cx.moveTo(x, y + s * .3); cx.bezierCurveTo(x, y, x - s / 2, y, x - s / 2, y + s * .3); cx.bezierCurveTo(x - s / 2, y + s * .6, x, y + s * .8, x, y + s); cx.bezierCurveTo(x, y + s * .8, x + s / 2, y + s * .6, x + s / 2, y + s * .3); cx.bezierCurveTo(x + s / 2, y, x, y, x, y + s * .3); cx.fill(); }
+  function sizeCanvas() { const d = devicePixelRatio || 1; cv.width = innerWidth * d; cv.height = innerHeight * d; cx.setTransform(d, 0, 0, d, 0, 0); }
+  addEventListener("resize", sizeCanvas); sizeCanvas();
   function loop() {
-    cv.width = innerWidth; cv.height = innerHeight; cx.clearRect(0, 0, cv.width, cv.height);
+    cx.clearRect(0, 0, innerWidth, innerHeight);
     parts = parts.filter((p) => p.life > 0);
-    for (const p of parts) { p.x += p.vx; p.y += p.vy; p.vy += .32; p.life -= .012; cx.globalAlpha = Math.max(p.life, 0); cx.fillStyle = p.c; heart(p.x, p.y, p.s); }
-    raf = parts.length ? requestAnimationFrame(loop) : (cx.clearRect(0, 0, cv.width, cv.height), 0);
+    for (const p of parts) { p.vx *= .99; p.x += p.vx; p.y += p.vy; p.vy += .32; p.life -= .012; cx.globalAlpha = Math.max(p.life, 0); cx.fillStyle = p.c; heart(p.x, p.y, p.s); }
+    raf = parts.length ? requestAnimationFrame(loop) : (cx.clearRect(0, 0, innerWidth, innerHeight), 0);
   }
 
   /* ---------- Public view ---------- */
@@ -370,6 +440,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   function render() {
+    requestAnimationFrame(staggerOnce);
     $("#empty").hidden = !!cfg; $("#content").hidden = !cfg;
     if (!cfg) return;
     document.body.dataset.mood = cfg.mood || "cerise";
@@ -405,23 +476,24 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (isNaN(ms)) { el.innerHTML = ""; return; }
     if (ms <= 0) { el.innerHTML = `<div><b>C'est maintenant</b></div>`; return; }
     const dd = Math.floor(ms / 864e5), hh = Math.floor(ms / 36e5) % 24, mm = Math.floor(ms / 6e4) % 60, ss = Math.floor(ms / 1e3) % 60;
-    el.innerHTML = [[dd, "jours"], [hh, "heures"], [mm, "min"], [ss, "sec"]].map(([v, l]) => `<div><b>${String(v).padStart(2, "0")}</b><span>${l}</span></div>`).join("");
+    el.innerHTML = [[dd, "jours"], [hh, "heures"], [mm, "min"], [ss, "sec"]].map(([v, l]) => `<div><b>${String(v).padStart(2, "0")}</b><span>${l}</span></div>`).join(""); flipChanged(el);
   }
   setInterval(tick, 1000);
 
   $("#acts").addEventListener("click", (e) => {
     const b = e.target.closest(".chip"); if (!b) return;
     const id = b.dataset.id; sel.acts.has(id) ? sel.acts.delete(id) : sel.acts.add(id);
-    b.setAttribute("aria-pressed", sel.acts.has(id)); typing();
+    b.setAttribute("aria-pressed", sel.acts.has(id)); pop(b); typing();
   });
   $("#slots").addEventListener("click", (e) => {
     const b = e.target.closest(".chip"); if (!b) return;
     sel.slot = sel.slot === b.dataset.id ? null : b.dataset.id;
-    document.querySelectorAll("#slots .chip").forEach((c) => c.setAttribute("aria-pressed", c.dataset.id === sel.slot)); typing();
+    document.querySelectorAll("#slots .chip").forEach((c) => c.setAttribute("aria-pressed", c.dataset.id === sel.slot)); pop(b); typing();
   });
   const hype = $("#hype");
   const showHype = () => ($("#hypeLabel").textContent = hype.value + " % · " + hypeText(+hype.value));
   hype.addEventListener("input", () => { showHype(); typing(); }); showHype();
+  hype.addEventListener("input", () => { const t = hypeText(+hype.value); if (t !== hype._t) { hype._t = t; pop($("#hypeLabel")); } });
   ["#idea", "#slotCustom", "#note"].forEach((s) => $(s).addEventListener("input", typing));
 
   // Yes / No
@@ -440,7 +512,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     const box = $("#yesno").getBoundingClientRect();
     const dx = (Math.random() - .5) * Math.min(box.width - 60, 420), dy = (Math.random() - .5) * 110;
     noBtn.style.transform = `translate(${dx}px, ${dy}px) rotate(${(Math.random() - .5) * 30}deg)`;
-    $("#yesBtn").style.transform = `scale(${Math.min(1 + noTries * .08, 1.6)})`;
+    $("#yesBtn").style.scale = String(Math.min(1 + noTries * .08, 1.6));
   }
   noBtn.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") flee(); });
   noBtn.addEventListener("pointerdown", flee);
@@ -463,6 +535,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       await db.collection("replies").add(body);
       hearts(80, innerWidth / 2, innerHeight * .8);
       toast("Réponse envoyée");
+      btn.textContent = "Envoyée ✓"; pop(btn); setTimeout(() => (btn.textContent = "Envoyer ma réponse"), 2400);
       $("#sentNote").textContent = "Envoyée à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + ". Tu peux en renvoyer une autre.";
       room && room.presence({ typing: false });
     } catch (err) {
@@ -601,9 +674,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       $("#lockCode").value = ""; $("#lockErr").textContent = ""; applyLock(); fillAdmin(); toast("Admin déverrouillé");
     } else { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); }
   });
-  function openDrawer(open) { drawer.classList.toggle("open", open); drawer.setAttribute("aria-hidden", !open); applyLock(); if (open && unlocked) fillAdmin(); if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300); }
+  function openDrawer(open) { drawer.classList.toggle("open", open); $("#scrim").classList.toggle("show", open); drawer.setAttribute("aria-hidden", !open); applyLock(); if (open && unlocked) fillAdmin(); if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300); }
   $("#fab").addEventListener("click", () => openDrawer(!drawer.classList.contains("open")));
   $("#closeDrawer").addEventListener("click", () => openDrawer(false));
+  $("#scrim").addEventListener("click", () => openDrawer(false));
 
   /* ---------- Boot ---------- */
   async function boot() {
