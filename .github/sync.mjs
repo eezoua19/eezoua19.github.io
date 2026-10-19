@@ -17,18 +17,26 @@ async function poll(topic) {
 const b64 = (t) => Uint8Array.from(Buffer.from(t, "base64"));
 const key = await crypto.subtle.importKey("jwk", { ...SIGN_PUB, ext: true }, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
 
-// 1. Config: keep the newest version that carries a valid admin signature
+// 1. Config: one signed document per invitation ("main" = main invitation + shared settings).
+//    Keep the newest version of each one that carries a valid admin signature.
 const current = JSON.parse(fs.readFileSync(CONFIG, "utf8"));
-let best = current;
+const docs = {};
+{ const main = { ...current }; delete main.invites; docs.main = { d: main, at: +current.updatedAt || 0 }; }
+for (const [k, v] of Object.entries(current.invites || {})) docs[k] = { d: v, at: +v.updatedAt || 0 };
+const docsBefore = JSON.stringify(docs);
 for (const ev of await poll(CFG_TOPIC)) {
   try {
     const m = JSON.parse(ev.message);
     if (!(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, b64(m.s), new TextEncoder().encode(m.c)))) continue;
-    const c = JSON.parse(m.c);
-    if ((+c.updatedAt || 0) > (+best.updatedAt || 0)) best = c;
+    const x = JSON.parse(m.c);
+    const k = x.k || "main", d = x.k ? x.d : x, at = +x.updatedAt || 0; // old format = whole config
+    if (!/^(main|[a-z0-9]{1,16})$/.test(k) || !d) continue;
+    if (at > (docs[k] ? docs[k].at : -1)) { const nd = { ...d, updatedAt: at }; delete nd.invites; docs[k] = { d: nd, at }; }
   } catch {}
 }
-if (best !== current) { fs.writeFileSync(CONFIG, JSON.stringify(best, null, 2) + "\n"); console.log("config.json updated", best.updatedAt); }
+const best = { ...docs.main.d, updatedAt: docs.main.at, invites: {} };
+for (const [k, v] of Object.entries(docs)) if (k !== "main") best.invites[k] = { ...v.d, updatedAt: v.at };
+if (JSON.stringify(docs) !== docsBefore) { fs.writeFileSync(CONFIG, JSON.stringify(best, null, 2) + "\n"); console.log("config.json updated"); }
 
 // 2. Replies: append new encrypted replies, drop the ones the admin deleted
 const store = fs.existsSync(REPLIES) ? JSON.parse(fs.readFileSync(REPLIES, "utf8")) : { items: [] };

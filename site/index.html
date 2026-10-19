@@ -362,6 +362,18 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   .tab { padding: 8px 9px; font-size: 14px; }
   .dbody { padding: 14px; }
 }
+
+/* Invitations */
+.inv { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--bg); display: flex; flex-direction: column; gap: 10px; animation: rise .4s var(--ease-out) both; }
+.inv.current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.inv-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.inv-top b { font-family: var(--f-display); font-size: 18px; }
+.inv-top small { color: var(--muted); font-size: 12px; }
+.inv-link { display: flex; gap: 8px; }
+.inv-link input { flex: 1; min-width: 0; font-size: 13px; background: var(--paper); }
+.edit-pick select { font-weight: 600; border-color: var(--accent); }
+.reply .who { font-weight: 700; color: var(--accent); }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 </style>
 </head>
 <body>
@@ -429,12 +441,21 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     <label class="toggle"><input type="checkbox" id="remember" checked> Rester connecté sur cet appareil</label>
     <button class="btn" type="submit" id="loginBtn">Se connecter</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
-    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 02 h 30</span>
+    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 03 h 00</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="inbox" type="button">Réponses <span id="inboxCount"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="invites" type="button">Invitations</button>
     <button class="tab" role="tab" aria-selected="false" data-tab="edit" type="button">Modifier</button>
+  </div>
+  <div class="dbody" id="invitesBody" hidden>
+    <section class="adm-sec">
+      <h4>Nouvelle invitation</h4>
+      <p class="hint" style="margin:0">Chaque personne reçoit son propre lien, avec son prénom et son propre billet. Ses réponses et ses visites sont rangées à son nom.</p>
+      <div class="row"><input class="field" id="newInvName" maxlength="40" placeholder="Prénom de la personne"><button class="btn small" id="newInvBtn" type="button">Créer</button></div>
+    </section>
+    <div class="list" id="inviteList"></div>
   </div>
   <div class="dbody" id="dashBody" hidden>
     <div class="tiles">
@@ -451,11 +472,12 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     <section class="adm-sec"><h4>Ses visites</h4><p class="hint" style="margin:0">Chaque fois qu'elle ouvre le billet, et quand elle clique sur Oui. Tes propres visites ne sont pas comptées.</p><div class="visits" id="visits"></div></section>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
-    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 02 h 30. Si tu vois une autre date, recharge la page.</p>
+    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 03 h 00. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
+    <label class="af"><span>Invitation</span><select class="field" id="invFilter"></select></label>
     <section class="adm-sec" id="replyBox">
-      <h4>Lui répondre sur le site</h4>
+      <h4>Répondre sur le site à <span id="replyTo"></span></h4>
       <p class="hint" style="margin:0">Ton message s'affiche en haut de sa page, en quelques secondes. Toute personne qui a le lien du billet peut aussi le lire.</p>
       <textarea class="field hand" id="adminMsg" maxlength="300" rows="3" placeholder="Ex. C'est noté, je passe te chercher à 19 h 💌"></textarea>
       <div class="row wrap-row"><button class="btn small" type="button" id="adminMsgSend">Envoyer</button><button class="btn ghost small" type="button" id="adminMsgDel">Retirer le message</button></div>
@@ -469,10 +491,10 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       <h4>Mise en ligne automatique</h4>
       <p class="hint" style="margin:0">Rien à configurer. Chaque modification apparaît sur sa page en quelques secondes, signée avec ton code. GitHub l'enregistre ensuite dans ton dépôt, toutes les 5 à 15 minutes.</p>
     </section>
+    <label class="af edit-pick"><span>Tu modifies l'invitation de</span><select class="field" id="editSel"></select></label>
     <section class="adm-sec">
       <h4>Le billet</h4>
-      <div class="two"><label class="af"><span>Ton prénom</span><input class="field" data-k="fromName" maxlength="40"></label>
-        <label class="af"><span>Son prénom</span><input class="field" data-k="toName" maxlength="40"></label></div>
+      <label class="af"><span>Son prénom</span><input class="field" data-k="toName" maxlength="40"></label>
       <label class="af"><span>Titre</span><input class="field" data-k="title" maxlength="80"></label>
       <label class="af"><span>Ton message</span><textarea class="field hand" data-k="intro" maxlength="800" rows="4"></textarea></label>
       <label class="af"><span>La question</span><input class="field" data-k="question" maxlength="100"></label>
@@ -496,7 +518,8 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
         <label class="af"><span>Où</span><input class="field" data-p="where" maxlength="100"></label></div>
     </section>
     <section class="adm-sec">
-      <h4>Réponse et musique</h4>
+      <h4>Pour toutes les invitations</h4>
+      <label class="af"><span>Ton prénom</span><input class="field" data-k="fromName" maxlength="40"></label>
       <label class="af"><span>Ton numéro WhatsApp</span><input class="field" data-k="whatsapp" inputmode="tel" maxlength="20" placeholder="Ex. 33612345678 (sans + ni espaces)"></label>
       <label class="af"><span>Musique (MP3 dans le dossier site/)</span><input class="field" data-k="music" maxlength="120" placeholder="Vide = la petite boîte à musique"></label>
     </section>
@@ -509,6 +532,19 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   let cfg = null; const sel = { acts: new Set(), slot: null }; let noTries = 0;
+  // Invitations : chaque personne a son lien (?i=…) et son propre billet ; sans ?i, c'est l'invitation principale
+  const INV = (new URLSearchParams(location.search).get("i") || "").replace(/[^a-z0-9]/gi, "").slice(0, 16).toLowerCase();
+  let page = null, previewKey = null, booted = false;
+  function inviteOf(key) {
+    if (!cfg) return null;
+    if (!key || key === "main") return cfg;
+    const v = cfg.invites && cfg.invites[key];
+    return v && !v.deleted ? v : null;
+  }
+  function viewOf(key) {
+    const inv = inviteOf(key); if (!inv) return null;
+    const out = { ...cfg, ...(inv === cfg ? {} : inv) }; delete out.invites; return out;
+  }
   function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2600); }
 
   // Small animation helpers
@@ -550,20 +586,28 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   const hypeText = (v) => v < 15 ? "Bof… convaincs-moi" : v < 40 ? "Pourquoi pas" : v < 65 ? "J'ai envie" : v < 90 ? "J'ai trop hâte" : "Je compte les secondes !!!";
 
   function render() {
+    const before = page && JSON.stringify([page.activities, page.slots]);
+    page = viewOf(previewKey || INV || "main");
+    if (!page) {
+      $("#content").hidden = true; $("#empty").hidden = false;
+      if (booted) $("#empty").innerHTML = "<h2>Cette invitation n'existe pas</h2><p>Vérifie le lien qu'on t'a envoyé.</p>";
+      return;
+    }
+    if (before && before !== JSON.stringify([page.activities, page.slots])) { sel.acts.clear(); sel.slot = null; }
     requestAnimationFrame(staggerOnce);
     $("#empty").hidden = true; $("#content").hidden = false;
-    document.body.dataset.mood = cfg.mood || "cerise";
-    $("#fromName").textContent = cfg.fromName || "Moi";
-    $("#toName").textContent = cfg.toName || "Toi";
-    $("#title").textContent = cfg.title || "";
-    $("#intro").textContent = cfg.intro || "";
-    $("#question").textContent = cfg.question || "Tu veux qu'on se voie ?";
+    document.body.dataset.mood = page.mood || "cerise";
+    $("#fromName").textContent = page.fromName || "Moi";
+    $("#toName").textContent = page.toName || "Toi";
+    $("#title").textContent = page.title || "";
+    $("#intro").textContent = page.intro || "";
+    $("#question").textContent = page.question || "Tu veux qu'on se voie ?";
     const d = new Date();
-    $("#ticketNo").textContent = "N° " + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, "0") + "-" + ((cfg.toName || "x").length * 37 + 100);
-    $("#acts").innerHTML = (cfg.activities || []).map((a, i) => !a.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.acts.has(String(i))}">${esc(a)}</button>`).join("");
-    $("#slots").innerHTML = (cfg.slots || []).map((s, i) => !s.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.slot === String(i)}">${esc(s)}</button>`).join("");
+    $("#ticketNo").textContent = "N° " + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, "0") + "-" + ((page.toName || "x").length * 37 + 100);
+    $("#acts").innerHTML = (page.activities || []).map((a, i) => !a.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.acts.has(String(i))}">${esc(a)}</button>`).join("");
+    $("#slots").innerHTML = (page.slots || []).map((s, i) => !s.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.slot === String(i)}">${esc(s)}</button>`).join("");
     renderLoveNote();
-    const p = cfg.confirmed; $("#plan").hidden = !(p && p.what);
+    const p = page.confirmed; $("#plan").hidden = !(p && p.what);
     if (p && p.what) {
       $("#planWhat").textContent = p.what;
       const w = p.when ? new Date(p.when) : null;
@@ -571,14 +615,14 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       tick();
     }
   }
-  setInterval(() => cfg && cfg.confirmed && cfg.confirmed.what && tick(), 1000);
+  setInterval(() => page && page.confirmed && page.confirmed.what && tick(), 1000);
   // Son message à lui, en haut de sa page
   let shownNote = null;
   function renderLoveNote() {
-    const m = cfg.adminMessage, has = !!(m && m.text && m.text.trim());
+    const m = page.adminMessage, has = !!(m && m.text && m.text.trim());
     $("#loveNote").hidden = !has;
     if (!has) { shownNote = ""; return; }
-    $("#loveFrom").textContent = (cfg.fromName || "").trim() || "moi";
+    $("#loveFrom").textContent = (page.fromName || "").trim() || "moi";
     $("#loveText").textContent = m.text;
     $("#loveWhen").textContent = m.at ? new Date(m.at).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
     const key = m.text + "|" + m.at;
@@ -590,7 +634,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   }
   const unlockedView = () => document.body.classList.contains("admin-open");
   function tick() {
-    const p = cfg.confirmed, el = $("#planCount"); const ms = new Date(p.when) - Date.now();
+    const p = page.confirmed, el = $("#planCount"); const ms = new Date(p.when) - Date.now();
     if (!p.when || isNaN(ms)) { el.innerHTML = ""; return; }
     if (ms <= 0) { el.innerHTML = "<div><b>C'est maintenant</b></div>"; return; }
     el.innerHTML = [[Math.floor(ms / 864e5), "jours"], [Math.floor(ms / 36e5) % 24, "heures"], [Math.floor(ms / 6e4) % 60, "min"], [Math.floor(ms / 1e3) % 60, "sec"]]
@@ -669,7 +713,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
 
   // Oui : le seul bouton qui marche
   $("#yesBtn").addEventListener("click", (e) => {
-    Music.start(cfg && cfg.music); track("yes"); const r = e.currentTarget.getBoundingClientRect(); hearts(70, r.left + r.width / 2, r.top);
+    Music.start(page && page.music); track("yes"); const r = e.currentTarget.getBoundingClientRect(); hearts(70, r.left + r.width / 2, r.top);
     $("#yesno").innerHTML = `<p class="said-yes">Je le savais ! Alors dis-moi tout juste en dessous ↓</p>`;
     $("#form").hidden = false;
     setTimeout(() => $("#form").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 400);
@@ -735,11 +779,13 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     try {
       if (localStorage.getItem("rdv-admin-device") || location.hash === "#admin" || unlocked) return; // tes visites ne comptent pas
       if (kind === "yes") { if (trackedYes) return; trackedYes = true; }
-      if (kind === "open") { const last = +localStorage.getItem("rdv-seen") || 0; if (Date.now() - last < 10 * 60e3) return; localStorage.setItem("rdv-seen", Date.now()); }
+      if (!page) return;
+      const seenKey = "rdv-seen-" + (INV || "main");
+      if (kind === "open") { const last = +localStorage.getItem(seenKey) || 0; if (Date.now() - last < 10 * 60e3) return; localStorage.setItem(seenKey, Date.now()); }
     } catch {}
     try {
       const title = kind === "yes" ? "💗 Elle a cliqué sur Oui" : "👀 Elle a ouvert le billet";
-      await fetch(VISITS + "?title=" + encodeURIComponent(title), { method: "POST", body: await sealReply({ kind, device: deviceName(), at: Date.now() }) });
+      await fetch(VISITS + "?title=" + encodeURIComponent(title), { method: "POST", body: await sealReply({ kind, inv: INV || "main", guest: page.toName || "", device: deviceName(), at: Date.now() }) });
     } catch {}
   }
 
@@ -834,13 +880,13 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   $("#form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const d = {
-      saidYes: true, activities: [...sel.acts].map((i) => cfg.activities[i]).filter(Boolean), idea: $("#idea").value.trim(),
-      slot: sel.slot != null ? cfg.slots[sel.slot] || "" : "", slotCustom: $("#slotCustom").value.trim(), hype: +hype.value, note: $("#note").value.trim(), at: Date.now(),
+      saidYes: true, inv: INV || "main", guest: page.toName || "", activities: [...sel.acts].map((i) => page.activities[i]).filter(Boolean), idea: $("#idea").value.trim(),
+      slot: sel.slot != null ? page.slots[sel.slot] || "" : "", slotCustom: $("#slotCustom").value.trim(), hype: +hype.value, note: $("#note").value.trim(), at: Date.now(),
     };
     if (recording) { toast("Arrête d'abord l'enregistrement du vocal"); return; }
     if (!d.activities.length && !d.idea && !d.slot && !d.slotCustom && !d.note && !voiceBlob) { toast("Choisis au moins une activité, un moment, écris un mot ou laisse un vocal"); return; }
     d.hasVoice = !!voiceBlob;
-    const btn = $("#sendBtn"), text = replyText(d), num = String(cfg.whatsapp || "").replace(/[^\d]/g, "");
+    const btn = $("#sendBtn"), text = replyText(d), num = String(page.whatsapp || "").replace(/[^\d]/g, "");
     const wa = num ? "https://wa.me/" + num + "?text=" + encodeURIComponent(text) : "";
     btn.disabled = true; btn.textContent = voiceBlob ? "Envoi du vocal…" : "Envoi…";
     try {
@@ -924,24 +970,38 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     curTab = t;
     document.querySelectorAll("#tabs .tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === t));
     $("#dashBody").hidden = !unlocked || t !== "dash"; $("#inboxBody").hidden = !unlocked || t !== "inbox"; $("#adminBody").hidden = !unlocked || t !== "edit";
+    $("#invitesBody").hidden = !unlocked || t !== "invites";
+    if (t === "invites") renderInvites();
     if (t === "dash") { renderDash(); checkRelay(); }
   }
   document.querySelectorAll("#tabs .tab").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
   function applyLock() {
     $("#lock").hidden = unlocked; $("#tabs").hidden = !unlocked; $("#logoutBtn").hidden = !unlocked;
     selectTab(curTab); editing = unlocked && drawer.classList.contains("open");
-    if (unlocked) { fillAdmin(); renderInbox(); } else setSave("Non connecté", "idle");
+    if (unlocked) { fillAdmin(); renderInvites(); renderInbox(); } else setSave("Non connecté", "idle");
+    setPreview();
   }
 
-  // Configuration : celle du dépôt GitHub, remplacée par toute version plus récente signée par l'admin
-  let cfgAt = -1, repoAt = 0, verifyKey = null;
-  function applyConfig(c) {
-    const at = +c.updatedAt || 0;
-    if (at <= cfgAt || (editing && cfg)) return false;
-    cfgAt = at;
-    if (!cfg || JSON.stringify([cfg.activities, cfg.slots]) !== JSON.stringify([c.activities, c.slots])) { sel.acts.clear(); sel.slot = null; }
-    cfg = c; render(); if (unlocked) { fillAdmin(); renderDash(); }
+  // Configuration : celle du dépôt GitHub, remplacée par toute version plus récente signée par l'admin.
+  // Chaque invitation est un document à part ("main" = l'invitation principale + les réglages communs).
+  const docAt = {}, repoAt = {}; let verifyKey = null;
+  function applyDoc(k, d, at) {
+    if (!d || at <= (docAt[k] ?? -1) || (editing && cfg)) return false;
+    docAt[k] = at;
+    if (k === "main") cfg = { ...d, updatedAt: at, invites: (cfg && cfg.invites) || {} };
+    else { cfg = cfg || { invites: {} }; cfg.invites = { ...(cfg.invites || {}), [k]: { ...d, updatedAt: at } }; }
     return true;
+  }
+  function afterApply(changed) { if (!changed) return; render(); if (unlocked) { fillAdmin(); renderInvites(); renderDash(); } }
+  function applyRepoConfig(c) {
+    const main = { ...c }; delete main.invites;
+    let changed = applyDoc("main", main, +c.updatedAt || 0); repoAt.main = Math.max(repoAt.main || 0, +c.updatedAt || 0);
+    for (const [k, v] of Object.entries(c.invites || {})) { changed = applyDoc(k, v, +v.updatedAt || 0) || changed; repoAt[k] = Math.max(repoAt[k] || 0, +v.updatedAt || 0); }
+    afterApply(changed);
+  }
+  function applySigned(x) {
+    if (x.k) { if (/^(main|[a-z0-9]{1,16})$/.test(x.k)) afterApply(applyDoc(x.k, x.d, +x.updatedAt || 0)); }
+    else afterApply(applyDoc("main", x, +x.updatedAt || 0)); // ancien format : toute la config d'un coup
   }
   async function openSigned(body) {
     try {
@@ -954,41 +1014,107 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   async function loadRepoConfig() {
     const tries = [fetch(REPO + "config.json", { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } }), fetch("config.json?t=" + Date.now())];
     let ok = false;
-    for (const t of tries) { try { const r = await t; if (r.ok) { const c = await r.json(); repoAt = Math.max(repoAt, +c.updatedAt || 0); applyConfig(c); ok = true; } } catch {} }
+    for (const t of tries) { try { const r = await t; if (r.ok) { applyRepoConfig(await r.json()); ok = true; } } catch {} }
     return ok;
   }
   async function loadRelayConfig() {
     try {
       const t = await (await fetch(CFG_RELAY + "/json?poll=1&since=all", { cache: "no-store" })).text();
-      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") { const c = await openSigned(ev.message); if (c) applyConfig(c); } }
+      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") { const x = await openSigned(ev.message); if (x) applySigned(x); } }
     } catch {}
   }
   function listenConfig() {
     if (!window.EventSource) return;
     const es = new EventSource(CFG_RELAY + "/sse");
-    es.onmessage = async (e) => { let ev; try { ev = JSON.parse(e.data); } catch { return; } if (ev.event === "message") { const c = await openSigned(ev.message); if (c) applyConfig(c); } };
+    es.onmessage = async (e) => { let ev; try { ev = JSON.parse(e.data); } catch { return; } if (ev.event === "message") { const x = await openSigned(ev.message); if (x) applySigned(x); } };
   }
 
-  // Publication : chaque modification est signée puis envoyée ; elle apparaît chez elle en quelques secondes
-  let pubT = 0, publishing = false, again = false;
-  function queuePublish() {
+  // Publication : chaque invitation modifiée est signée puis envoyée ; elle apparaît chez la personne en quelques secondes
+  let pubT = 0, publishing = false, again = false; const dirty = new Set();
+  function queuePublish(key = editKey) {
     if (!signKey) { setSave("Reconnecte-toi pour publier", "warn"); return; }
-    setSave("Modification…", "busy"); clearTimeout(pubT); pubT = setTimeout(publish, 1200);
+    dirty.add(key); setSave("Modification…", "busy"); clearTimeout(pubT); pubT = setTimeout(publish, 1200);
   }
+  const cleanList = (l) => (l || []).filter((x) => x && x.trim());
   async function publish() {
     if (publishing) { again = true; return; }
     publishing = true; again = false; setSave("Mise en ligne…", "busy");
-    const clean = { ...cfg, activities: (cfg.activities || []).filter((x) => x.trim()), slots: (cfg.slots || []).filter((x) => x.trim()), deletedReplies: (cfg.deletedReplies || []).slice(-100), updatedAt: Date.now() };
-    const c = JSON.stringify(clean);
+    const keys = [...dirty]; dirty.clear();
     try {
-      const body = JSON.stringify({ c, s: b64buf(await crypto.subtle.sign(SIG, signKey, enc(c))) });
-      if (enc(body).length > 4000) { setSave("Texte trop long : raccourcis ton message", "warn"); return; }
-      const r = await fetch(CFG_RELAY, { method: "POST", body });
-      if (!r.ok) throw new Error(String(r.status));
-      cfg.updatedAt = cfgAt = clean.updatedAt; setSave("En ligne ✓ " + now(), "ok"); renderDash();
-    } catch { setSave("Connexion perdue, nouvel essai…", "warn"); again = true; }
+      for (const key of keys) {
+        const src = key === "main" ? cfg : cfg.invites && cfg.invites[key]; if (!src) continue;
+        const at = Date.now(); let d;
+        if (src.deleted) d = { deleted: true };
+        else { d = { ...src, activities: cleanList(src.activities), slots: cleanList(src.slots) }; delete d.invites; if (key === "main") d.deletedReplies = (cfg.deletedReplies || []).slice(-100); }
+        d.updatedAt = at;
+        const c = JSON.stringify({ k: key, d, updatedAt: at });
+        const body = JSON.stringify({ c, s: b64buf(await crypto.subtle.sign(SIG, signKey, enc(c))) });
+        if (enc(body).length > 4000) { setSave("Texte trop long : raccourcis le message de cette invitation", "warn"); continue; }
+        const r = await fetch(CFG_RELAY, { method: "POST", body });
+        if (!r.ok) throw new Error(String(r.status));
+        docAt[key] = at; src.updatedAt = at;
+      }
+      setSave("En ligne ✓ " + now(), "ok"); renderDash(); renderInvites();
+    } catch { keys.forEach((k) => dirty.add(k)); setSave("Connexion perdue, nouvel essai…", "warn"); again = true; }
     finally { publishing = false; if (again) { clearTimeout(pubT); pubT = setTimeout(publish, 4000); } }
   }
+
+  // Invitations (admin)
+  let editKey = "main", invFilter = "all";
+  const BASE_URL = "https://eezoua19.github.io/";
+  const inviteKeys = () => ["main", ...Object.keys((cfg && cfg.invites) || {}).filter((k) => inviteOf(k)).sort((a, b) => (cfg.invites[a].createdAt || 0) - (cfg.invites[b].createdAt || 0))];
+  const inviteLabel = (k) => { const v = inviteOf(k || "main"); return v ? ((v.toName || "").trim() || (k === "main" || !k ? "Invitation principale" : "Sans prénom")) : "Invitation supprimée"; };
+  const inviteLink = (k) => (k === "main" ? BASE_URL : BASE_URL + "?i=" + k);
+  const target = () => inviteOf(editKey) || cfg;
+  const SHARED = ["fromName", "whatsapp", "music"];
+  function setPreview() { const p = unlocked && drawer.classList.contains("open") ? editKey : null; if (p !== previewKey) { previewKey = p; render(); } }
+  function selectEdit(k) { editKey = inviteOf(k) ? k : "main"; setPreview(); fillAdmin(); renderInvites(); }
+  function renderInvites() {
+    if (!unlocked || !cfg) return;
+    const keys = inviteKeys();
+    if (!inviteOf(editKey)) editKey = "main";
+    const opts = (cur) => keys.map((k) => `<option value="${k}"${k === cur ? " selected" : ""}>${esc(inviteLabel(k))}${k === "main" ? " (principale)" : ""}</option>`).join("");
+    $("#editSel").innerHTML = opts(editKey);
+    if (invFilter !== "all" && !inviteOf(invFilter)) invFilter = "all";
+    $("#invFilter").innerHTML = `<option value="all"${invFilter === "all" ? " selected" : ""}>Toutes les invitations</option>` + opts(invFilter);
+    const stat = (k) => {
+      const rs = [...inbox.values()].filter((r) => !r.data.test && (r.data.inv || "main") === k).length;
+      const vs = [...visits.values()].filter((v) => (v.data.inv || "main") === k).map((v) => v.data.at || v.time * 1000).sort((a, b) => b - a);
+      return `${rs} réponse${rs > 1 ? "s" : ""} · ${vs.length} visite${vs.length > 1 ? "s" : ""}${vs.length ? " · vue il y a " + ago(vs[0]) : " · pas encore ouverte"}`;
+    };
+    $("#inviteList").innerHTML = keys.map((k) => `<div class="inv${k === editKey ? " current" : ""}">
+      <div class="inv-top"><b>${esc(inviteLabel(k))}</b><small>${k === "main" ? "Invitation principale" : "Créée le " + esc(new Date(cfg.invites[k].createdAt || Date.now()).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }))}</small></div>
+      <small class="hint" style="margin:0">${stat(k)}</small>
+      <div class="inv-link"><input class="field" readonly value="${esc(inviteLink(k))}" aria-label="Lien de l'invitation"><button class="btn small" type="button" data-copy="${k}">Copier</button></div>
+      <div class="row wrap-row"><button class="btn ghost small" type="button" data-edit="${k}">Modifier</button>
+        <a class="btn ghost small" href="${esc(inviteLink(k))}" target="_blank" rel="noopener">Ouvrir</a>
+        ${k === "main" ? "" : `<button class="btn ghost small" type="button" data-delinv="${k}">Supprimer</button>`}</div></div>`).join("");
+  }
+  $("#inviteList").addEventListener("click", async (e) => {
+    const cp = e.target.closest("[data-copy]"), ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-delinv]");
+    if (cp) {
+      const link = inviteLink(cp.dataset.copy);
+      try { await navigator.clipboard.writeText(link); toast("Lien copié : envoie-le à " + inviteLabel(cp.dataset.copy)); }
+      catch { const i = cp.parentElement.querySelector("input"); i.focus(); i.select(); toast("Lien sélectionné : copie-le"); }
+    }
+    if (ed) { selectEdit(ed.dataset.edit); selectTab("edit"); }
+    if (del) {
+      if (del.dataset.armed !== "1") { del.dataset.armed = "1"; del.textContent = "Confirmer la suppression"; return; }
+      const k = del.dataset.delinv; cfg.invites[k] = { deleted: true, updatedAt: Date.now() };
+      queuePublish(k); if (editKey === k) selectEdit("main"); renderInvites(); toast("Invitation supprimée : son lien ne marche plus");
+    }
+  });
+  $("#newInvBtn").addEventListener("click", () => {
+    const name = $("#newInvName").value.trim(); if (!name) { toast("Écris d'abord le prénom de la personne"); $("#newInvName").focus(); return; }
+    let id; do { id = Math.random().toString(36).slice(2, 8); } while (cfg.invites && cfg.invites[id]);
+    cfg.invites = { ...(cfg.invites || {}), [id]: { toName: name, title: cfg.title, intro: cfg.intro, question: cfg.question, mood: cfg.mood,
+      activities: [...(cfg.activities || [])], slots: [...(cfg.slots || [])], confirmed: null, adminMessage: null, createdAt: Date.now() } };
+    $("#newInvName").value = ""; queuePublish(id); selectEdit(id); renderInvites();
+    toast("Invitation créée pour " + name + " : copie son lien");
+  });
+  $("#newInvName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#newInvBtn").click(); } });
+  $("#editSel").addEventListener("change", (e) => selectEdit(e.target.value));
+  $("#invFilter").addEventListener("change", (e) => { invFilter = e.target.value; renderInbox(); fillAdminMsg(); });
 
   // Boîte de réponses : relais ntfy.sh en direct + copie gardée dans site/replies.json par GitHub
   const inbox = new Map(); let replyES = null;
@@ -1053,7 +1179,8 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       visitES.onmessage = async (e) => {
         let ev; try { ev = JSON.parse(e.data); } catch { return; }
         if (ev.event === "message" && await addVisit(ev.id, ev.time, ev.message)) {
-          renderDash(); toast(visits.get(ev.id).data.kind === "yes" ? "💗 Elle vient de cliquer sur Oui !" : "👀 Elle regarde le billet en ce moment");
+          const v = visits.get(ev.id).data, who = v.guest || inviteLabel(v.inv);
+          renderDash(); renderInvites(); toast(v.kind === "yes" ? "💗 " + who + " vient de cliquer sur Oui !" : "👀 " + who + " regarde son billet en ce moment");
         }
       };
     }
@@ -1081,20 +1208,22 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     }
   }
   function renderInbox() {
-    const list = [...inbox.entries()].sort((a, b) => b[1].time - a[1].time);
+    const all = [...inbox.entries()].sort((a, b) => b[1].time - a[1].time);
+    const list = all.filter(([, r]) => invFilter === "all" || (r.data.inv || "main") === invFilter);
+    renderInvites();
     $("#fabBadge").hidden = !list.length; $("#fabBadge").textContent = list.length;
     $("#inboxCount").textContent = list.length ? "(" + list.length + ")" : "";
-    $("#inboxHint").textContent = privKey ? "Toutes ses réponses, de la plus récente à la plus ancienne. Les nouvelles arrivent ici en direct." : "Connecte-toi pour lire ses réponses.";
+    $("#inboxHint").textContent = !privKey ? "Connecte-toi pour lire les réponses." : invFilter === "all" ? "Toutes les réponses, de la plus récente à la plus ancienne. Choisis une invitation au-dessus pour lui répondre sur le site." : "Les réponses de " + inviteLabel(invFilter) + ". Les nouvelles arrivent ici en direct.";
     renderDash();
     $("#inbox").innerHTML = list.map(([id, r]) => {
       const d = r.data, when = new Date((d.at || r.time * 1000)).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
       const tags = [...(d.activities || []), d.idea && "💡 " + d.idea, d.slot && "🗓 " + d.slot, d.slotCustom && "🗓 " + d.slotCustom].filter(Boolean);
-      return `<div class="reply"><div class="top"><span>${esc(when)}</span><span>${d.test ? "Test · " : "A dit oui · "}impatience ${esc(d.hype)} %</span></div>
+      return `<div class="reply"><div class="top"><span><span class="who">${esc(d.guest || inviteLabel(d.inv))}</span> · ${esc(when)}</span><span>${d.test ? "Test · " : "A dit oui · "}impatience ${esc(d.hype)} %</span></div>
         ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
         ${d.note ? `<div class="msg">${esc(d.note)}</div>` : ""}
         ${d.voice ? `<button type="button" class="btn small voice-tag" data-play="${esc(id)}">▶ Écouter son vocal (${fmt(+d.voice.dur || 0)})</button>` : ""}
         <div class="acts"><button type="button" class="btn small" data-use="${esc(id)}">Utiliser pour le plan</button>
-        <button type="button" class="btn ghost small" data-answer="1">Lui répondre</button>
+        <button type="button" class="btn ghost small" data-answer="${esc(d.inv || "main")}">Lui répondre</button>
         <button type="button" class="btn ghost small" data-rm="${esc(id)}">Supprimer</button></div></div>`;
     }).join("") || (privKey ? `<p class="hint" style="margin:0">Pas encore de réponse. Quand elle envoie la sienne, elle apparaît ici tout de suite.</p>` : "");
   }
@@ -1125,15 +1254,15 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const vs = [...visits.values()].map((v) => ({ ...v.data, at: v.data.at || v.time * 1000 })).sort((a, b) => b.at - a.at);
     const live = vs.length && Date.now() - vs[0].at < 3 * 60e3;
     $("#tSeen").textContent = vs.length ? (live ? "En ce moment" : ago(vs[0].at)) : "—";
-    $("#tSeenLbl").textContent = vs.length ? "Dernière visite · " + vs[0].device : "Dernière visite";
+    $("#tSeenLbl").textContent = vs.length ? "Dernière visite · " + (vs[0].guest || inviteLabel(vs[0].inv)) : "Dernière visite";
     $("#visits").innerHTML = vs.slice(0, 15).map((v, i) => `<div class="visit${i === 0 && live ? " now" : ""}"><i>${v.kind === "yes" ? "💗" : "👀"}</i>
       <b>${v.kind === "yes" ? "A cliqué sur Oui" : "A ouvert le billet"}</b>
-      <small>${esc(new Date(v.at).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))} · ${esc(v.device)}</small></div>`).join("")
+      <small>${esc(v.guest || inviteLabel(v.inv))} · ${esc(new Date(v.at).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))} · ${esc(v.device)}</small></div>`).join("")
       || `<span class="hint" style="margin:0">Pas encore de visite. Dès qu'elle ouvre le lien, tu le vois ici.</span>`;
     const acts = {}, slots = {};
     list.forEach((r) => { (r.data.activities || []).forEach((a) => (acts[a] = (acts[a] || 0) + 1)); if (r.data.idea) acts["💡 " + r.data.idea] = (acts["💡 " + r.data.idea] || 0) + 1; [r.data.slot, r.data.slotCustom].filter(Boolean).forEach((x) => (slots[x] = (slots[x] || 0) + 1)); });
     $("#dashActs").innerHTML = bars("Activités", acts); $("#dashSlots").innerHTML = bars("Moments", slots);
-    const p = cfg.confirmed || {}, saved = !cfg.updatedAt || repoAt >= cfg.updatedAt;
+    const p = cfg.confirmed || {}, saved = Object.keys(docAt).every((k) => (repoAt[k] || 0) >= docAt[k]);
     const checks = [
       ["Connexion", signKey ? "ok" : "warn", signKey ? "Connecté : tu peux modifier et lire ses réponses." : "Reconnecte-toi pour modifier."],
       ["Mise en ligne", relayOk === false ? "warn" : "ok", relayOk === false ? "Le relais est injoignable depuis cet appareil : réessaie dans un instant." : "Tes modifications apparaissent sur sa page en quelques secondes."],
@@ -1156,18 +1285,20 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   });
   $("#inbox").addEventListener("click", (e) => {
     const play = e.target.closest("button[data-play]"); if (play) { playVoice(play.dataset.play, play); return; }
-    if (e.target.closest("button[data-answer]")) { $("#replyBox").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("#adminMsg").focus(), 300); return; }
+    const ans = e.target.closest("button[data-answer]");
+    if (ans) { invFilter = inviteOf(ans.dataset.answer) ? ans.dataset.answer : "main"; renderInbox(); fillAdminMsg(); $("#replyBox").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("#adminMsg").focus(), 300); return; }
     const rm = e.target.closest("button[data-rm]"), use = e.target.closest("button[data-use]");
     if (rm) {
       if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Confirmer la suppression"; return; }
       const id = rm.dataset.rm; inbox.delete(id);
       cfg.deletedReplies = [...new Set([...(cfg.deletedReplies || []), id])];
-      queuePublish(); renderInbox(); toast("Réponse supprimée");
+      queuePublish("main"); renderInbox(); toast("Réponse supprimée");
     }
     if (use) {
       const r = inbox.get(use.dataset.use); if (!r) return;
       const d = r.data;
-      cfg.confirmed = { ...(cfg.confirmed || {}), what: [...(d.activities || []).map((a) => a.replace(/^\S+\s/, "")), d.idea].filter(Boolean).join(" + ") };
+      selectEdit(d.inv || "main"); const t = target();
+      t.confirmed = { ...(t.confirmed || {}), what: [...(d.activities || []).map((a) => a.replace(/^\S+\s/, "")), d.idea].filter(Boolean).join(" + ") };
       selectTab("edit"); fillAdmin(); render(); queuePublish();
       $('[data-p="when"]').scrollIntoView({ behavior: "smooth", block: "center" }); toast("Plan pré-rempli : choisis la date");
     }
@@ -1175,7 +1306,11 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
 
   // Lui répondre sur le site
   function fillAdminMsg() {
-    const m = cfg && cfg.adminMessage;
+    const box = invFilter === "all" ? null : inviteOf(invFilter);
+    $("#replyBox").hidden = !box;
+    if (!box) return;
+    $("#replyTo").textContent = inviteLabel(invFilter);
+    const m = box.adminMessage;
     if (document.activeElement !== $("#adminMsg")) $("#adminMsg").value = (m && m.text) || "";
     $("#adminMsgState").textContent = m && m.text ? "Affiché sur sa page depuis le " + new Date(m.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + "." : "Aucun message affiché pour l'instant.";
     $("#adminMsgDel").hidden = !(m && m.text);
@@ -1183,9 +1318,10 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   $("#adminMsgSend").addEventListener("click", () => {
     const text = $("#adminMsg").value.trim();
     if (!text) { toast("Écris d'abord ton message"); return; }
-    cfg.adminMessage = { text, at: Date.now() }; render(); fillAdminMsg(); queuePublish(); toast("Message envoyé : elle le voit en haut de sa page");
+    const box = inviteOf(invFilter); if (!box) return;
+    box.adminMessage = { text, at: Date.now() }; render(); fillAdminMsg(); queuePublish(invFilter); toast("Message envoyé à " + inviteLabel(invFilter) + " : visible en haut de sa page");
   });
-  $("#adminMsgDel").addEventListener("click", () => { cfg.adminMessage = null; $("#adminMsg").value = ""; render(); fillAdminMsg(); queuePublish(); toast("Message retiré"); });
+  $("#adminMsgDel").addEventListener("click", () => { const box = inviteOf(invFilter); if (!box) return; box.adminMessage = null; $("#adminMsg").value = ""; render(); fillAdminMsg(); queuePublish(invFilter); toast("Message retiré"); });
 
   // Formulaire de modification
   function listHtml(key, items, ph) {
@@ -1193,36 +1329,42 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       <button type="button" class="icon-btn" data-del="${key}" data-i="${i}" aria-label="Supprimer">✕</button></div>`).join("") || `<span class="hint" style="margin:0">Rien pour l'instant.</span>`;
   }
   function fillLists() {
-    $("#listActs").innerHTML = listHtml("activities", cfg.activities || [], "Ex. 🍿 Ciné");
-    $("#listSlots").innerHTML = listHtml("slots", cfg.slots || [], "Ex. Samedi soir");
+    const t = target();
+    $("#listActs").innerHTML = listHtml("activities", t.activities || [], "Ex. 🍿 Ciné");
+    $("#listSlots").innerHTML = listHtml("slots", t.slots || [], "Ex. Samedi soir");
   }
   function fillAdmin() {
     if (!cfg) return;
     fillAdminMsg();
-    $("#moods").innerHTML = Object.entries(MOODS).map(([k, c]) => `<button type="button" class="sw" title="${k}" aria-label="${k}" data-mood="${k}" style="background:${c}" aria-pressed="${(cfg.mood || "cerise") === k}"></button>`).join("");
+    const t = target();
+    $("#moods").innerHTML = Object.entries(MOODS).map(([k, c]) => `<button type="button" class="sw" title="${k}" aria-label="${k}" data-mood="${k}" style="background:${c}" aria-pressed="${(t.mood || "cerise") === k}"></button>`).join("");
     if (!$("#adminBody").contains(document.activeElement) || !document.activeElement.dataset.list) fillLists();
-    document.querySelectorAll("#adminBody [data-k]").forEach((el) => { if (el !== document.activeElement) el.value = cfg[el.dataset.k] ?? ""; });
-    const p = cfg.confirmed || {}; document.querySelectorAll("#adminBody [data-p]").forEach((el) => { if (el !== document.activeElement) el.value = p[el.dataset.p] || ""; });
+    document.querySelectorAll("#adminBody [data-k]").forEach((el) => { if (el !== document.activeElement) el.value = (SHARED.includes(el.dataset.k) ? cfg : t)[el.dataset.k] ?? ""; });
+    const p = t.confirmed || {}; document.querySelectorAll("#adminBody [data-p]").forEach((el) => { if (el !== document.activeElement) el.value = p[el.dataset.p] || ""; });
   }
   $("#adminBody").addEventListener("input", (e) => {
     const el = e.target;
-    if (el.dataset.k) cfg[el.dataset.k] = el.value;
-    else if (el.dataset.p) cfg.confirmed = { ...(cfg.confirmed || {}), [el.dataset.p]: el.value };
-    else if (el.dataset.list) { const l = [...(cfg[el.dataset.list] || [])]; l[+el.dataset.i] = el.value; cfg[el.dataset.list] = l; }
+    const t = target();
+    if (el.dataset.k && SHARED.includes(el.dataset.k)) { cfg[el.dataset.k] = el.value; render(); queuePublish("main"); return; }
+    if (el.dataset.k) t[el.dataset.k] = el.value;
+    else if (el.dataset.p) t.confirmed = { ...(t.confirmed || {}), [el.dataset.p]: el.value };
+    else if (el.dataset.list) { const l = [...(t[el.dataset.list] || [])]; l[+el.dataset.i] = el.value; t[el.dataset.list] = l; }
     else return;
-    render(); queuePublish();
+    render(); queuePublish(); if (el.dataset.k === "toName") renderInvites();
   });
   $("#adminBody").addEventListener("click", (e) => {
     const mood = e.target.closest(".sw[data-mood]"), del = e.target.closest("button[data-del]"), add = e.target.closest("button[data-add]");
-    if (mood) { cfg.mood = mood.dataset.mood; fillAdmin(); }
-    else if (del) { const l = [...(cfg[del.dataset.del] || [])]; l.splice(+del.dataset.i, 1); cfg[del.dataset.del] = l; sel.acts.clear(); sel.slot = null; fillLists(); }
-    else if (add) { const k = add.dataset.add; cfg[k] = [...(cfg[k] || []), ""]; fillLists(); $(`#${k === "activities" ? "listActs" : "listSlots"} .row:last-child input`).focus(); }
+    const t = target();
+    if (mood) { t.mood = mood.dataset.mood; fillAdmin(); }
+    else if (del) { const l = [...(t[del.dataset.del] || [])]; l.splice(+del.dataset.i, 1); t[del.dataset.del] = l; sel.acts.clear(); sel.slot = null; fillLists(); }
+    else if (add) { const k = add.dataset.add; t[k] = [...(t[k] || []), ""]; fillLists(); $(`#${k === "activities" ? "listActs" : "listSlots"} .row:last-child input`).focus(); }
     else return;
     render(); queuePublish();
   });
 
   function openDrawer(open) {
     document.body.classList.toggle("admin-open", open);
+    if (!open) { previewKey = null; render(); }
     if (!open) { drawer.classList.remove("full"); document.body.classList.remove("admin-full"); $("#fullBtn").textContent = "Plein écran"; }
     drawer.classList.toggle("open", open); $("#scrim").classList.toggle("show", open); drawer.setAttribute("aria-hidden", !open); applyLock();
     if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300);
@@ -1236,7 +1378,9 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   (async () => {
     const ok = await loadRepoConfig();
     await loadRelayConfig();
+    booted = true;
     if (!ok && !cfg) $("#empty").innerHTML = "<h2>Oups</h2><p>Le billet n'a pas pu être chargé. Vérifie ta connexion et recharge la page.</p>";
+    else render();
     listenConfig();
     if (await restoreSession()) { unlocked = true; setSave("Connecté ✓", "ok"); syncInbox(); }
     if (location.hash === "#admin") openDrawer(true);
