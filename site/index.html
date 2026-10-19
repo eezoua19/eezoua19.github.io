@@ -363,13 +363,14 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Administration" aria-hidden="true">
   <div class="dhead"><div><h3>Admin</h3><div class="status" id="saveState" data-s="idle">Verrouillé</div></div>
-    <button class="btn ghost small" id="closeDrawer" type="button">Fermer</button></div>
+    <div class="row wrap-row" style="justify-content:flex-end"><button class="btn ghost small" id="logoutBtn" type="button" hidden>Se déconnecter</button><button class="btn ghost small" id="closeDrawer" type="button">Fermer</button></div></div>
   <form class="dbody lockbox" id="lock">
     <label class="af"><span>Code administrateur</span>
       <input class="field" id="lockCode" type="password" autocomplete="current-password" placeholder="Entre ton code"></label>
-    <button class="btn" type="submit">Déverrouiller</button>
+    <label class="toggle"><input type="checkbox" id="remember" checked> Rester connecté sur cet appareil</label>
+    <button class="btn" type="submit" id="loginBtn">Se connecter</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
-    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 00 h 50</span>
+    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 10</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
@@ -389,18 +390,16 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     </div>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
-    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 00 h 50. Si tu vois une autre date, recharge la page.</p>
+    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 10. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
     <p class="hint" style="margin:0" id="inboxHint"></p>
     <div class="list" id="inbox"></div>
   </div>
   <div class="dbody" id="adminBody" hidden>
-    <section class="adm-sec" id="ghSec">
+    <section class="adm-sec" id="pubSec">
       <h4>Mise en ligne automatique</h4>
-      <p class="hint" style="margin:0" id="ghHint"></p>
-      <input class="field" id="ghToken" type="password" autocomplete="off" placeholder="Colle ton jeton github_pat_…">
-      <div class="row wrap-row"><button class="btn small" id="ghSave" type="button">Connecter GitHub</button><button class="btn ghost small" id="ghForget" type="button">Déconnecter</button></div>
+      <p class="hint" style="margin:0">Rien à configurer. Chaque modification apparaît sur sa page en quelques secondes, signée avec ton code. GitHub l'enregistre ensuite dans ton dépôt, toutes les 5 à 15 minutes.</p>
     </section>
     <section class="adm-sec">
       <h4>Le billet</h4>
@@ -657,19 +656,66 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     } finally { btn.disabled = false; }
   });
 
-  // Admin : seule l'empreinte SHA-256 du code est dans la page
+  // ---------- Admin ----------
+  // Le code n'est jamais dans la page : seulement son empreinte, et deux clés chiffrées avec lui
+  // (une pour lire ses réponses, une pour signer tes modifications).
   const CODE_HASH = "bbbcac68203ae94b4a961c1a050584be3f47db65d14be4b06c3f9c0a9d36d615";
-  const API = "https://api.github.com/repos/eezoua19/eezoua19.github.io/contents/site/config.json";
-  const drawer = $("#drawer"); let unlocked = false, editing = false;
-  let token = ""; try { token = localStorage.getItem("rdv-gh") || ""; } catch {}
-  async function sha(t) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rdv-salt:" + t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
+  const SIGN = {"pub": {"kty": "EC", "crv": "P-256", "x": "n9pHuz7fSbzrqFOJS-k-kxuUw0gp9pvDCRB55IfL10I", "y": "IQuHGfYrjYeLf9t34z68rQz6fKH1lC1AHt9xfCJyahY"}, "priv": {"salt": "a60KczUDz1txgW14NoZX9A==", "iv": "AmKAPaLDFexb2P/c", "data": "QgRdqsiAWkCh3EEohTNVehpLlYr4Qzur7IPUy/XXihUhzqdO194+ezm1pvyypGLKRt7bRoFrSLYRv5YEj4+60xSXSzpDUlHOcMJdAUxFQ304FkSZPthGB4PGjILYbLyuR6aNK9TX8bKGNhm8QkzS0CVeirdKojAoIw6oLJepxW71yloH7AadO91A9+JoBRZ5DbsWcV7WPgvbvA=="}, "topic": "rdv-cfg-e63268770e8d0ae4f6c36f76"};
+  const CFG_RELAY = "https://ntfy.sh/" + SIGN.topic;
+  const REPO = "https://api.github.com/repos/eezoua19/eezoua19.github.io/contents/site/";
+  const ES = { name: "ECDSA", namedCurve: "P-256" }, SIG = { name: "ECDSA", hash: "SHA-256" };
   const MOODS = { cerise: "#d81e4b", menthe: "#0b8a6b", lavande: "#6a3fd1", soleil: "#c25600", nuit: "#2f4fd6" };
-  function setSave(t, state) { const el = $("#saveState"); el.textContent = t; el.dataset.s = state || (/✓/.test(t) ? "ok" : /…/.test(t) ? "busy" : "warn"); }
-  function ghUi() {
-    $("#ghHint").textContent = token ? "GitHub est connecté sur cet appareil : chaque modification part en ligne toute seule, en quelques secondes." : "Pour l'instant tu vois seulement un aperçu. Colle ton jeton GitHub pour que tes modifications partent en ligne automatiquement. Il reste uniquement sur cet appareil.";
-    $("#ghToken").hidden = !!token; $("#ghSave").hidden = !!token; $("#ghForget").hidden = !token;
-    if (!saving && !dirty) setSave(token ? "Connecté ✓" : "Aperçu seulement : GitHub non connecté", token ? "ok" : "warn");
+  const drawer = $("#drawer");
+  let unlocked = false, editing = false, privKey = null, signKey = null;
+  try { localStorage.removeItem("rdv-gh"); } catch {} // ancien jeton GitHub : plus utilisé
+  async function sha(t) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rdv-salt:" + t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
+  function setSave(t, state) { const el = $("#saveState"); el.textContent = t; el.dataset.s = state || "idle"; }
+  const enc = (t) => new TextEncoder().encode(t);
+  const now = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  // Connexion / déconnexion
+  async function decryptKey(box, code) {
+    const base = await crypto.subtle.importKey("raw", enc(code), "PBKDF2", false, ["deriveKey"]);
+    const k = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: u8(box.salt), iterations: 250000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    return crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(box.iv) }, k, u8(box.data));
   }
+  async function useKeys(pk, sk) {
+    privKey = await crypto.subtle.importKey("pkcs8", pk, EC, false, ["deriveKey"]);
+    signKey = await crypto.subtle.importKey("pkcs8", sk, ES, false, ["sign"]);
+  }
+  async function login(code, remember) {
+    const [pk, sk] = await Promise.all([decryptKey(BOX.priv, code), decryptKey(SIGN.priv, code)]);
+    await useKeys(pk, sk);
+    try { if (remember) localStorage.setItem("rdv-session", JSON.stringify({ p: b64buf(pk), s: b64buf(sk) })); else localStorage.removeItem("rdv-session"); } catch {}
+  }
+  async function restoreSession() {
+    try {
+      const saved = JSON.parse(localStorage.getItem("rdv-session") || "null");
+      if (!saved) return false;
+      await useKeys(u8(saved.p), u8(saved.s)); return true;
+    } catch { try { localStorage.removeItem("rdv-session"); } catch {} return false; }
+  }
+  function logout() {
+    privKey = signKey = null; unlocked = false; editing = false; inbox.clear();
+    try { localStorage.removeItem("rdv-session"); } catch {}
+    if (replyES) { replyES.close(); replyES = null; }
+    renderInbox(); applyLock(); setSave("Déconnecté", "idle"); toast("Tu es déconnecté");
+  }
+  $("#lock").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!crypto.subtle) { $("#lockErr").textContent = "Ouvre le site en https pour te connecter."; return; }
+    const code = $("#lockCode").value;
+    if (await sha(code) !== CODE_HASH) { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); return; }
+    $("#loginBtn").disabled = true; $("#loginBtn").textContent = "Connexion…";
+    try {
+      await login(code, $("#remember").checked);
+      unlocked = true; $("#lockCode").value = ""; $("#lockErr").textContent = "";
+      applyLock(); setSave("Connecté ✓", "ok"); toast("Connecté"); syncInbox();
+    } catch { $("#lockErr").textContent = "Connexion impossible sur ce navigateur. Mets-le à jour ou essaie Chrome ou Safari."; }
+    finally { $("#loginBtn").disabled = false; $("#loginBtn").textContent = "Se connecter"; }
+  });
+  $("#logoutBtn").addEventListener("click", logout);
+
   let curTab = "dash";
   function selectTab(t) {
     curTab = t;
@@ -678,18 +724,72 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     if (t === "dash") { renderDash(); checkRelay(); }
   }
   document.querySelectorAll("#tabs .tab").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
-  function applyLock() { $("#lock").hidden = unlocked; $("#tabs").hidden = !unlocked; selectTab(curTab); editing = unlocked && drawer.classList.contains("open"); if (unlocked) { fillAdmin(); ghUi(); renderInbox(); } }
-
-  // Boîte de réponses : messages chiffrés relayés par ntfy.sh, gardés dans site/replies.json quand GitHub est connecté
-  const RAPI = "https://api.github.com/repos/eezoua19/eezoua19.github.io/contents/site/replies.json";
-  let privKey = null, store = { items: [], deleted: [] }, storeSha = null, es = null;
-  const inbox = new Map();
-  async function unlockPriv(code) {
-    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
-    const k = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: u8(BOX.priv.salt), iterations: 250000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
-    const pk = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(BOX.priv.iv) }, k, u8(BOX.priv.data));
-    privKey = await crypto.subtle.importKey("pkcs8", pk, EC, false, ["deriveKey"]);
+  function applyLock() {
+    $("#lock").hidden = unlocked; $("#tabs").hidden = !unlocked; $("#logoutBtn").hidden = !unlocked;
+    selectTab(curTab); editing = unlocked && drawer.classList.contains("open");
+    if (unlocked) { fillAdmin(); renderInbox(); } else setSave("Non connecté", "idle");
   }
+
+  // Configuration : celle du dépôt GitHub, remplacée par toute version plus récente signée par l'admin
+  let cfgAt = -1, repoAt = 0, verifyKey = null;
+  function applyConfig(c) {
+    const at = +c.updatedAt || 0;
+    if (at <= cfgAt || (editing && cfg)) return false;
+    cfgAt = at;
+    if (!cfg || JSON.stringify([cfg.activities, cfg.slots]) !== JSON.stringify([c.activities, c.slots])) { sel.acts.clear(); sel.slot = null; }
+    cfg = c; render(); if (unlocked) { fillAdmin(); renderDash(); }
+    return true;
+  }
+  async function openSigned(body) {
+    try {
+      const m = JSON.parse(body);
+      verifyKey = verifyKey || await crypto.subtle.importKey("jwk", { ...SIGN.pub, ext: true }, ES, false, ["verify"]);
+      if (await crypto.subtle.verify(SIG, verifyKey, u8(m.s), enc(m.c))) return JSON.parse(m.c);
+    } catch {}
+    return null; // pas signé par l'admin : ignoré
+  }
+  async function loadRepoConfig() {
+    const tries = [fetch(REPO + "config.json", { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } }), fetch("config.json?t=" + Date.now())];
+    let ok = false;
+    for (const t of tries) { try { const r = await t; if (r.ok) { const c = await r.json(); repoAt = Math.max(repoAt, +c.updatedAt || 0); applyConfig(c); ok = true; } } catch {} }
+    return ok;
+  }
+  async function loadRelayConfig() {
+    try {
+      const t = await (await fetch(CFG_RELAY + "/json?poll=1&since=all", { cache: "no-store" })).text();
+      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") { const c = await openSigned(ev.message); if (c) applyConfig(c); } }
+    } catch {}
+  }
+  function listenConfig() {
+    if (!window.EventSource) return;
+    const es = new EventSource(CFG_RELAY + "/sse");
+    es.onmessage = async (e) => { let ev; try { ev = JSON.parse(e.data); } catch { return; } if (ev.event === "message") { const c = await openSigned(ev.message); if (c) applyConfig(c); } };
+  }
+
+  // Publication : chaque modification est signée puis envoyée ; elle apparaît chez elle en quelques secondes
+  let pubT = 0, publishing = false, again = false;
+  function queuePublish() {
+    if (!signKey) { setSave("Reconnecte-toi pour publier", "warn"); return; }
+    setSave("Modification…", "busy"); clearTimeout(pubT); pubT = setTimeout(publish, 1200);
+  }
+  async function publish() {
+    if (publishing) { again = true; return; }
+    publishing = true; again = false; setSave("Mise en ligne…", "busy");
+    const clean = { ...cfg, activities: (cfg.activities || []).filter((x) => x.trim()), slots: (cfg.slots || []).filter((x) => x.trim()), deletedReplies: (cfg.deletedReplies || []).slice(-100), updatedAt: Date.now() };
+    const c = JSON.stringify(clean);
+    try {
+      const body = JSON.stringify({ c, s: b64buf(await crypto.subtle.sign(SIG, signKey, enc(c))) });
+      if (enc(body).length > 4000) { setSave("Texte trop long : raccourcis ton message", "warn"); return; }
+      const r = await fetch(CFG_RELAY, { method: "POST", body });
+      if (!r.ok) throw new Error(String(r.status));
+      cfg.updatedAt = cfgAt = clean.updatedAt; setSave("En ligne ✓ " + now(), "ok"); renderDash();
+    } catch { setSave("Connexion perdue, nouvel essai…", "warn"); again = true; }
+    finally { publishing = false; if (again) { clearTimeout(pubT); pubT = setTimeout(publish, 4000); } }
+  }
+
+  // Boîte de réponses : relais ntfy.sh en direct + copie gardée dans site/replies.json par GitHub
+  const inbox = new Map(); let replyES = null;
+  const isDeleted = (id) => ((cfg && cfg.deletedReplies) || []).includes(id);
   async function openReply(sealed) {
     const m = JSON.parse(sealed);
     const eph = await crypto.subtle.importKey("raw", u8(m.e), EC, false, []);
@@ -697,53 +797,25 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(m.iv) }, key, u8(m.c))));
   }
   async function addSealed(id, time, sealed) {
-    if (!privKey || inbox.has(id) || store.deleted.includes(id)) return false;
+    if (!privKey || inbox.has(id) || isDeleted(id)) return false;
     try { inbox.set(id, { time, data: await openReply(sealed) }); return true; } catch { return false; } // messages illisibles ignorés
   }
-  async function loadStore() {
-    const r = await gh(RAPI);
-    if (r.status === 404) { store = { items: [], deleted: [] }; storeSha = null; return; }
-    if (!r.ok) throw r;
-    const j = await r.json(); storeSha = j.sha;
-    const parsed = JSON.parse(new TextDecoder().decode(u8(j.content.replace(/\s/g, ""))));
-    store = { items: parsed.items || [], deleted: parsed.deleted || [] };
-  }
-  async function saveStore() {
-    if (!token) return;
-    for (let i = 0; i < 2; i++) {
-      const body = { message: "Admin : boîte de réponses", content: b64(JSON.stringify(store, null, 1) + "\n") };
-      if (storeSha) body.sha = storeSha;
-      const r = await gh(RAPI, { method: "PUT", body: JSON.stringify(body) });
-      if (r.ok) { storeSha = (await r.json()).content.sha; return; }
-      if (r.status !== 409 && r.status !== 422) return;
-      const mine = store; await loadStore();
-      store = { items: [...store.items, ...mine.items.filter((x) => !store.items.some((y) => y.id === x.id))], deleted: [...new Set([...store.deleted, ...mine.deleted])] };
-    }
-  }
-  function keep(id, time, sealed) { if (!store.items.some((x) => x.id === id)) { store.items.push({ id, time, sealed }); return true; } return false; }
   async function syncInbox() {
     if (!privKey) return;
-    if (token) { try { await loadStore(); } catch {} }
-    for (const it of store.items) await addSealed(it.id, it.time, it.sealed);
-    let changed = false;
+    try {
+      const r = await fetch(REPO + "replies.json", { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } });
+      if (r.ok) for (const it of (await r.json()).items || []) await addSealed(it.id, it.time, it.sealed);
+    } catch {}
     try {
       const t = await (await fetch(NTFY + "/json?poll=1&since=all", { cache: "no-store" })).text();
-      for (const line of t.split("\n")) {
-        if (!line.trim()) continue;
-        const ev = JSON.parse(line);
-        if (ev.event === "message" && !store.deleted.includes(ev.id)) { await addSealed(ev.id, ev.time, ev.message); if (inbox.has(ev.id) && keep(ev.id, ev.time, ev.message)) changed = true; }
-      }
+      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") await addSealed(ev.id, ev.time, ev.message); }
     } catch {}
-    if (changed) saveStore().catch(() => {});
     renderInbox();
-    if (!es && window.EventSource) {
-      es = new EventSource(NTFY + "/sse");
-      es.onmessage = async (e) => {
+    if (!replyES && window.EventSource) {
+      replyES = new EventSource(NTFY + "/sse");
+      replyES.onmessage = async (e) => {
         let ev; try { ev = JSON.parse(e.data); } catch { return; }
-        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message)) {
-          if (keep(ev.id, ev.time, ev.message)) saveStore().catch(() => {});
-          renderInbox(); hearts(30, innerWidth - 60, 60); toast("Nouvelle réponse !");
-        }
+        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message)) { renderInbox(); hearts(30, innerWidth - 60, 60); toast("Nouvelle réponse !"); }
       };
     }
   }
@@ -751,9 +823,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const list = [...inbox.entries()].sort((a, b) => b[1].time - a[1].time);
     $("#fabBadge").hidden = !list.length; $("#fabBadge").textContent = list.length;
     $("#inboxCount").textContent = list.length ? "(" + list.length + ")" : "";
-    $("#inboxHint").textContent = !privKey ? "Les réponses s'affichent une fois l'admin déverrouillé." :
-      token ? "Les nouvelles réponses arrivent ici en direct et sont gardées dans ton dépôt GitHub." :
-      "Les réponses arrivent ici en direct. Connecte GitHub (onglet Modifier) pour les garder plus de 12 heures.";
+    $("#inboxHint").textContent = privKey ? "Toutes ses réponses, de la plus récente à la plus ancienne. Les nouvelles arrivent ici en direct." : "Connecte-toi pour lire ses réponses.";
     renderDash();
     $("#inbox").innerHTML = list.map(([id, r]) => {
       const d = r.data, when = new Date((d.at || r.time * 1000)).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -765,6 +835,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
         <button type="button" class="btn ghost small" data-rm="${esc(id)}">Supprimer</button></div></div>`;
     }).join("") || (privKey ? `<p class="hint" style="margin:0">Pas encore de réponse. Quand elle envoie la sienne, elle apparaît ici tout de suite.</p>` : "");
   }
+
   // Tableau de bord
   let relayOk = null, relayAt = 0;
   async function checkRelay() {
@@ -791,11 +862,11 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const acts = {}, slots = {};
     list.forEach((r) => { (r.data.activities || []).forEach((a) => (acts[a] = (acts[a] || 0) + 1)); if (r.data.idea) acts["💡 " + r.data.idea] = (acts["💡 " + r.data.idea] || 0) + 1; [r.data.slot, r.data.slotCustom].filter(Boolean).forEach((x) => (slots[x] = (slots[x] || 0) + 1)); });
     $("#dashActs").innerHTML = bars("Activités", acts); $("#dashSlots").innerHTML = bars("Moments", slots);
-    const p = cfg.confirmed || {};
+    const p = cfg.confirmed || {}, saved = !cfg.updatedAt || repoAt >= cfg.updatedAt;
     const checks = [
-      ["Lecture des réponses", privKey ? "ok" : "warn", privKey ? "Prête : tes réponses sont déchiffrées avec ton code." : "Impossible d'ouvrir la clé : recharge la page et retape ton code."],
-      ["GitHub", token ? "ok" : "warn", token ? "Connecté : tes modifications partent en ligne et les réponses sont gardées." : "Non connecté : modifications en aperçu seulement, réponses gardées 12 h. Connecte-le dans l'onglet Modifier."],
-      ["Relais des réponses", relayOk === null ? "idle" : relayOk ? "ok" : "warn", relayOk === null ? "Vérification…" : relayOk ? "Joignable : ses réponses peuvent arriver." : "Injoignable depuis cet appareil : ses réponses passeront par WhatsApp."],
+      ["Connexion", signKey ? "ok" : "warn", signKey ? "Connecté : tu peux modifier et lire ses réponses." : "Reconnecte-toi pour modifier."],
+      ["Mise en ligne", relayOk === false ? "warn" : "ok", relayOk === false ? "Le relais est injoignable depuis cet appareil : réessaie dans un instant." : "Tes modifications apparaissent sur sa page en quelques secondes."],
+      ["Sauvegarde GitHub", saved ? "ok" : "idle", saved ? "Tout est enregistré dans ton dépôt." : "Dernière modification pas encore copiée dans ton dépôt : GitHub le fait toutes les 5 à 15 minutes, rien à faire."],
       ["Rendez-vous confirmé", p.what ? "ok" : "idle", p.what ? p.what + (p.when ? " · " + new Date(p.when).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "") : "Pas encore : utilise « Utiliser pour le plan » sur une réponse."],
       ["WhatsApp", cfg.whatsapp ? "ok" : "idle", cfg.whatsapp ? "Elle peut aussi t'envoyer sa réponse sur WhatsApp." : "Pas de numéro : optionnel, onglet Modifier."],
       ["Musique", "ok", cfg.music ? "MP3 : " + cfg.music : "Petite boîte à musique quand elle clique sur Oui."],
@@ -808,28 +879,28 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const b = e.currentTarget; b.disabled = true; b.textContent = "Envoi du test…";
     try {
       await postReply({ saidYes: true, activities: ["🧪 Test"], idea: "", slot: "", slotCustom: "", hype: 100, note: "Réponse test envoyée depuis l'admin", at: Date.now(), test: true });
-      toast("Test envoyé : il doit apparaître dans Réponses");
-      setTimeout(syncInbox, 1500);
+      toast("Test envoyé : il doit apparaître dans Réponses"); setTimeout(syncInbox, 1500);
     } catch { toast("Le test n'a pas pu partir : le relais est injoignable"); relayOk = false; renderDash(); }
     finally { b.disabled = false; b.textContent = "Envoyer une réponse test"; }
   });
-
   $("#inbox").addEventListener("click", (e) => {
     const rm = e.target.closest("button[data-rm]"), use = e.target.closest("button[data-use]");
     if (rm) {
       if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Confirmer la suppression"; return; }
       const id = rm.dataset.rm; inbox.delete(id);
-      store.items = store.items.filter((x) => x.id !== id); if (!store.deleted.includes(id)) store.deleted.push(id);
-      saveStore().catch(() => {}); renderInbox(); toast("Réponse supprimée");
+      cfg.deletedReplies = [...new Set([...(cfg.deletedReplies || []), id])];
+      queuePublish(); renderInbox(); toast("Réponse supprimée");
     }
     if (use) {
       const r = inbox.get(use.dataset.use); if (!r) return;
       const d = r.data;
       cfg.confirmed = { ...(cfg.confirmed || {}), what: [...(d.activities || []).map((a) => a.replace(/^\S+\s/, "")), d.idea].filter(Boolean).join(" + ") };
-      selectTab("edit"); fillAdmin(); render(); queuePush();
+      selectTab("edit"); fillAdmin(); render(); queuePublish();
       $('[data-p="when"]').scrollIntoView({ behavior: "smooth", block: "center" }); toast("Plan pré-rempli : choisis la date");
     }
   });
+
+  // Formulaire de modification
   function listHtml(key, items, ph) {
     return items.map((v, i) => `<div class="row"><input class="field" data-list="${key}" data-i="${i}" maxlength="60" value="${esc(v)}" placeholder="${ph}" aria-label="${ph}">
       <button type="button" class="icon-btn" data-del="${key}" data-i="${i}" aria-label="Supprimer">✕</button></div>`).join("") || `<span class="hint" style="margin:0">Rien pour l'instant.</span>`;
@@ -845,78 +916,13 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     document.querySelectorAll("#adminBody [data-k]").forEach((el) => { if (el !== document.activeElement) el.value = cfg[el.dataset.k] ?? ""; });
     const p = cfg.confirmed || {}; document.querySelectorAll("#adminBody [data-p]").forEach((el) => { if (el !== document.activeElement) el.value = p[el.dataset.p] || ""; });
   }
-
-  // Lecture en direct : la page vérifie la config toutes les 4 secondes (requêtes conditionnelles, gratuites tant que rien ne change)
-  let lastText = "";
-  function applyRemote(text) {
-    if (text === lastText) return;
-    let c; try { c = JSON.parse(text); } catch { return; }
-    lastText = text;
-    if (editing) return; // pendant que tu modifies, ta version locale gagne
-    if (!cfg || JSON.stringify([cfg.activities, cfg.slots]) !== JSON.stringify([c.activities, c.slots])) { sel.acts.clear(); sel.slot = null; }
-    cfg = c; render();
-  }
-  async function pull() {
-    try {
-      const headers = { Accept: "application/vnd.github.raw+json" };
-      if (token) headers.Authorization = "Bearer " + token;
-      const r = await fetch(API, { cache: "no-cache", headers });
-      if (r.ok) { applyRemote(await r.text()); return true; }
-    } catch {}
-    try { const r = await fetch("config.json?t=" + Date.now()); if (r.ok) { applyRemote(await r.text()); return true; } } catch {}
-    return false;
-  }
-
-  // Écriture : chaque modification de l'admin est enregistrée dans site/config.json sur GitHub
-  let fileSha = null, saveT = 0, saving = false, dirty = false;
-  const b64 = (t) => { let bin = ""; new TextEncoder().encode(t).forEach((b) => (bin += String.fromCharCode(b))); return btoa(bin); };
-  const gh = (url, opt = {}) => fetch(url, { ...opt, cache: "no-store", headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", ...(opt.headers || {}) } });
-  async function getSha() { const r = await gh(API); if (!r.ok) throw r; return (await r.json()).sha; }
-  const TOKEN_URL = "https://github.com/settings/personal-access-tokens";
-  function tokenProblem(status) {
-    if (status === 401) return "GitHub dit que ce jeton n'est pas valide : il est mal copié, expiré ou supprimé. Crée-en un nouveau.";
-    if (status === 403) return "Ce jeton peut lire le dépôt mais pas écrire dedans. Sur GitHub, modifie le jeton : Repository permissions → Contents → Read and write.";
-    if (status === 404) return "Ce jeton n'a pas accès au dépôt eezoua19.github.io. Sur GitHub, modifie le jeton : Repository access → Only select repositories → eezoua19.github.io.";
-    return "GitHub a répondu une erreur (" + status + "). Réessaie dans un instant.";
-  }
-  function dropToken(status) {
-    token = ""; fileSha = null; try { localStorage.removeItem("rdv-gh"); } catch {}
-    $("#ghToken").value = ""; ghUi(); setSave("Jeton refusé par GitHub", "warn");
-    $("#ghHint").innerHTML = `<b>Jeton refusé.</b> ${esc(tokenProblem(status))} <a href="${TOKEN_URL}" target="_blank" rel="noopener">Ouvrir mes jetons GitHub</a>, puis recolle le jeton ici.`;
-    if (unlocked) { selectTab("edit"); $("#ghSec").scrollIntoView({ behavior: "smooth", block: "start" }); }
-    renderDash();
-  }
-  async function push() {
-    if (!token) { setSave("Aperçu seulement : GitHub non connecté", "warn"); return; }
-    if (saving) { dirty = true; return; }
-    saving = true; dirty = false; setSave("Mise en ligne…");
-    const clean = { ...cfg, activities: (cfg.activities || []).filter((x) => x.trim()), slots: (cfg.slots || []).filter((x) => x.trim()) };
-    const text = JSON.stringify(clean, null, 2) + "\n";
-    try {
-      let done = false;
-      for (let i = 0; i < 3 && !done; i++) {
-        if (!fileSha) fileSha = await getSha();
-        const r = await gh(API, { method: "PUT", body: JSON.stringify({ message: "Admin : mise à jour du billet", content: b64(text), sha: fileSha }) });
-        if (r.ok) { fileSha = (await r.json()).content.sha; lastText = text; done = true; setSave("En ligne ✓ " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })); }
-        else if (r.status === 409 || r.status === 422) fileSha = null;
-        else if (r.status === 401 || r.status === 403 || r.status === 404) { dropToken(r.status); done = true; }
-        else throw r;
-      }
-      if (!done) dirty = true;
-    } catch (e) {
-      if (e && (e.status === 401 || e.status === 403 || e.status === 404)) dropToken(e.status);
-      else { setSave("Connexion perdue, nouvel essai…"); dirty = true; }
-    } finally { saving = false; if (dirty) { clearTimeout(saveT); saveT = setTimeout(push, 2500); } }
-  }
-  function queuePush() { if (!token) { setSave("Aperçu seulement : GitHub non connecté", "warn"); return; } setSave("Modification…"); clearTimeout(saveT); saveT = setTimeout(push, 900); }
-
   $("#adminBody").addEventListener("input", (e) => {
     const el = e.target;
     if (el.dataset.k) cfg[el.dataset.k] = el.value;
     else if (el.dataset.p) cfg.confirmed = { ...(cfg.confirmed || {}), [el.dataset.p]: el.value };
     else if (el.dataset.list) { const l = [...(cfg[el.dataset.list] || [])]; l[+el.dataset.i] = el.value; cfg[el.dataset.list] = l; }
     else return;
-    render(); queuePush();
+    render(); queuePublish();
   });
   $("#adminBody").addEventListener("click", (e) => {
     const mood = e.target.closest(".sw[data-mood]"), del = e.target.closest("button[data-del]"), add = e.target.closest("button[data-add]");
@@ -924,49 +930,31 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     else if (del) { const l = [...(cfg[del.dataset.del] || [])]; l.splice(+del.dataset.i, 1); cfg[del.dataset.del] = l; sel.acts.clear(); sel.slot = null; fillLists(); }
     else if (add) { const k = add.dataset.add; cfg[k] = [...(cfg[k] || []), ""]; fillLists(); $(`#${k === "activities" ? "listActs" : "listSlots"} .row:last-child input`).focus(); }
     else return;
-    render(); queuePush();
+    render(); queuePublish();
   });
-  $("#ghSave").addEventListener("click", async () => {
-    const t = $("#ghToken").value.trim(); if (!t) { toast("Colle d'abord ton jeton"); return; }
-    token = t; setSave("Vérification du jeton…");
-    try {
-      const g = await gh(API);
-      if (!g.ok) { dropToken(g.status); return; }
-      const j = await g.json();
-      // Test d'écriture : on réenregistre la config telle quelle pour vérifier le droit d'écrire
-      const w = await gh(API, { method: "PUT", body: JSON.stringify({ message: "Admin : connexion de l'admin", content: j.content.replace(/\s/g, ""), sha: j.sha }) });
-      if (!w.ok) { dropToken(w.status); return; }
-      fileSha = (await w.json()).content.sha;
-      try { localStorage.setItem("rdv-gh", t); } catch {}
-      $("#ghToken").value = ""; ghUi(); setSave("Connecté ✓"); toast("GitHub connecté : tout est enregistré automatiquement"); renderDash(); if (privKey) syncInbox();
-    } catch { token = ""; ghUi(); setSave("Pas de connexion internet, réessaie", "warn"); }
-  });
-  $("#ghForget").addEventListener("click", () => { token = ""; fileSha = null; try { localStorage.removeItem("rdv-gh"); } catch {} ghUi(); setSave("Jeton oublié sur cet appareil"); });
-  $("#lock").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!crypto.subtle) { $("#lockErr").textContent = "Ouvre le site en https pour te connecter."; return; }
-    if (await sha($("#lockCode").value) === CODE_HASH) {
-      const code = $("#lockCode").value;
-      unlocked = true; $("#lockCode").value = ""; $("#lockErr").textContent = ""; applyLock(); toast("Admin déverrouillé");
-      try { await unlockPriv(code); } catch { $("#inboxHint").textContent = "Impossible d'ouvrir la boîte de réponses sur cet appareil."; }
-      syncInbox();
-    } else { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); }
-  });
+
   function openDrawer(open) {
     document.body.classList.toggle("admin-open", open);
     if (!open) { drawer.classList.remove("full"); document.body.classList.remove("admin-full"); $("#fullBtn").textContent = "Plein écran"; }
     drawer.classList.toggle("open", open); $("#scrim").classList.toggle("show", open); drawer.setAttribute("aria-hidden", !open); applyLock();
     if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300);
-    if (!open) { editing = false; if (!saving && !dirty) pull(); }
+    if (!open) editing = false;
   }
   $("#fab").addEventListener("click", () => openDrawer(!drawer.classList.contains("open")));
   $("#closeDrawer").addEventListener("click", () => openDrawer(false));
   $("#scrim").addEventListener("click", () => openDrawer(false));
 
-  if (location.hash === "#admin") setTimeout(() => openDrawer(true), 400);
-  pull().then((ok) => { if (!ok && !cfg) $("#empty").innerHTML = "<h2>Oups</h2><p>Le billet n'a pas pu être chargé. Vérifie ta connexion et recharge la page.</p>"; });
-  setInterval(() => { if (!document.hidden && !saving) pull(); }, 4000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pull(); });
+  // Démarrage
+  (async () => {
+    const ok = await loadRepoConfig();
+    await loadRelayConfig();
+    if (!ok && !cfg) $("#empty").innerHTML = "<h2>Oups</h2><p>Le billet n'a pas pu être chargé. Vérifie ta connexion et recharge la page.</p>";
+    listenConfig();
+    if (await restoreSession()) { unlocked = true; setSave("Connecté ✓", "ok"); syncInbox(); }
+    if (location.hash === "#admin") openDrawer(true);
+  })();
+  setInterval(() => { if (!document.hidden) loadRepoConfig(); }, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadRepoConfig(); loadRelayConfig(); } });
 })();
 </script>
 </body>

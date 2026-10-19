@@ -1,0 +1,32 @@
+name: Sauvegarder les modifications et les réponses
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node .github/sync.mjs
+      - name: Commit
+        run: |
+          git config user.name "rendez-vous-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/config.json
+          [ -f site/replies.json ] && git add site/replies.json
+          if git diff --cached --quiet; then echo "Rien de nouveau"; exit 0; fi
+          git commit -m "Sauvegarde automatique du billet et des réponses"
+          git push
