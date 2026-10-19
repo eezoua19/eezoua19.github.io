@@ -249,6 +249,37 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     </div>
   </div>
 </main>
+<button class="fab" id="fab" type="button" aria-label="Administration" style="padding:10px 14px;opacity:.55">Admin</button>
+<aside class="drawer" id="drawer" aria-label="Administration" aria-hidden="true">
+  <div class="dhead"><div><h3>Admin</h3><div class="save-state">Les changements s'affichent ici en aperçu</div></div>
+    <button class="btn ghost small" id="closeDrawer" type="button">Fermer</button></div>
+  <form class="dbody" id="lock" style="flex:0">
+    <label class="af"><span>Code administrateur</span>
+      <input class="field" id="lockCode" type="password" autocomplete="current-password" placeholder="Entre ton code"></label>
+    <button class="btn" type="submit">Déverrouiller</button>
+    <span class="hint" id="lockErr" style="margin:0"></span>
+  </form>
+  <div class="dbody" id="adminBody" hidden>
+    <label class="af"><span>Ton prénom</span><input class="field" data-k="fromName" maxlength="40"></label>
+    <label class="af"><span>Son prénom</span><input class="field" data-k="toName" maxlength="40"></label>
+    <label class="af"><span>Titre</span><input class="field" data-k="title" maxlength="80"></label>
+    <label class="af"><span>Ton message</span><textarea class="field hand" data-k="intro" maxlength="800"></textarea></label>
+    <label class="af"><span>La question</span><input class="field" data-k="question" maxlength="100"></label>
+    <label class="af"><span>Ambiance</span><select class="field" data-k="mood">
+      <option value="cerise">Cerise</option><option value="menthe">Menthe</option><option value="lavande">Lavande</option><option value="soleil">Soleil</option><option value="nuit">Nuit</option></select></label>
+    <label class="af"><span>Ton numéro WhatsApp (ex. 33612345678)</span><input class="field" data-k="whatsapp" inputmode="tel" maxlength="20"></label>
+    <label class="af"><span>Activités (une par ligne)</span><textarea class="field" data-k="activities" rows="6"></textarea></label>
+    <label class="af"><span>Créneaux (un par ligne)</span><textarea class="field" data-k="slots" rows="4"></textarea></label>
+    <div class="divider"></div>
+    <label class="af"><span>Plan confirmé : on fait quoi</span><input class="field" data-p="what" maxlength="100" placeholder="Laisse vide pour ne rien afficher"></label>
+    <label class="af"><span>Quand</span><input class="field" data-p="when" type="datetime-local"></label>
+    <label class="af"><span>Où</span><input class="field" data-p="where" maxlength="100"></label>
+    <div class="divider"></div>
+    <p class="hint" style="margin:0">Pour publier : le bouton copie ta nouvelle configuration et ouvre <b>site/config.json</b> sur GitHub. Remplace tout le texte par ce que tu as copié, puis clique sur « Commit changes ». Le site se met à jour en 1 minute environ.</p>
+    <button class="btn" id="publish" type="button">Copier et ouvrir GitHub</button>
+    <textarea class="field" id="jsonOut" rows="6" readonly hidden></textarea>
+  </div>
+</aside>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 (() => {
@@ -292,9 +323,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       $("#planWhat").textContent = p.what;
       const w = p.when ? new Date(p.when) : null;
       $("#planMeta").textContent = [w && !isNaN(w) ? w.toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "", p.where].filter(Boolean).join(" · ");
-      tick(); setInterval(tick, 1000);
+      tick();
     }
   }
+  setInterval(() => cfg && cfg.confirmed && cfg.confirmed.what && tick(), 1000);
   function tick() {
     const p = cfg.confirmed, el = $("#planCount"); const ms = new Date(p.when) - Date.now();
     if (!p.when || isNaN(ms)) { el.innerHTML = ""; return; }
@@ -348,6 +380,43 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (num) { location.href = "https://wa.me/" + num + "?text=" + encodeURIComponent(text); return; }
     try { await navigator.clipboard.writeText(text); toast("Réponse copiée : envoie-la-moi par message"); }
     catch { $("#sentNote").textContent = text; }
+  });
+
+  // Admin : seule l'empreinte SHA-256 du code est dans la page
+  const CODE_HASH = "bbbcac68203ae94b4a961c1a050584be3f47db65d14be4b06c3f9c0a9d36d615";
+  const EDIT_URL = "https://github.com/eezoua19/eezoua19/edit/ccr-b1401f01-n1yh5s/site/config.json";
+  const drawer = $("#drawer"); let unlocked = false;
+  try { unlocked = sessionStorage.getItem("rdv-admin") === CODE_HASH; } catch {}
+  async function sha(t) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rdv-salt:" + t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
+  function applyLock() { $("#lock").hidden = unlocked; $("#adminBody").hidden = !unlocked; if (unlocked) fillAdmin(); }
+  function fillAdmin() {
+    if (!cfg) return;
+    document.querySelectorAll("#adminBody [data-k]").forEach((el) => { const v = cfg[el.dataset.k]; el.value = Array.isArray(v) ? v.join("\n") : (v ?? ""); });
+    const p = cfg.confirmed || {}; document.querySelectorAll("#adminBody [data-p]").forEach((el) => (el.value = p[el.dataset.p] || ""));
+  }
+  $("#adminBody").addEventListener("input", (e) => {
+    const el = e.target;
+    if (el.dataset.k) cfg[el.dataset.k] = /activities|slots/.test(el.dataset.k) ? el.value.split("\n").map((x) => x.trim()).filter(Boolean) : el.value;
+    if (el.dataset.p) cfg.confirmed = { ...(cfg.confirmed || {}), [el.dataset.p]: el.value };
+    sel.acts.clear(); sel.slot = null; render();
+  });
+  $("#lock").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!crypto.subtle) { $("#lockErr").textContent = "Ouvre le site en https pour te connecter."; return; }
+    if (await sha($("#lockCode").value) === CODE_HASH) {
+      unlocked = true; try { sessionStorage.setItem("rdv-admin", CODE_HASH); } catch {}
+      $("#lockCode").value = ""; $("#lockErr").textContent = ""; applyLock(); toast("Admin déverrouillé");
+    } else { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); }
+  });
+  function openDrawer(open) { drawer.classList.toggle("open", open); drawer.setAttribute("aria-hidden", !open); applyLock(); if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300); }
+  $("#fab").addEventListener("click", () => openDrawer(!drawer.classList.contains("open")));
+  $("#closeDrawer").addEventListener("click", () => openDrawer(false));
+  $("#publish").addEventListener("click", async () => {
+    const json = JSON.stringify(cfg, null, 2) + "\n";
+    const out = $("#jsonOut"); out.value = json;
+    try { await navigator.clipboard.writeText(json); toast("Configuration copiée"); }
+    catch { out.hidden = false; out.select(); toast("Copie le texte ci-dessous"); }
+    window.open(EDIT_URL, "_blank", "noopener");
   });
 
   fetch("config.json?t=" + Date.now()).then((r) => r.json()).then((c) => { cfg = c; render(); })
