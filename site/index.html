@@ -294,11 +294,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 
 /* Dashboard */
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .tile { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--bg); display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .tile b { font-family: var(--f-display); font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent); overflow-wrap: break-word; }
 .tile span { font-size: 12px; color: var(--muted); }
-@media (max-width: 520px) { .tiles { gap: 6px; } .tile { padding: 10px 8px; } .tile b { font-size: 17px; } .tile span { font-size: 11px; } #fullBtn { display: none; } }
+@media (max-width: 620px) { .tiles { gap: 8px; } .tile b { font-size: 20px; } #fullBtn { display: none; } }
 .lbl-sm { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; font-size: 14px; }
@@ -329,6 +329,39 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
 .voice-preview { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; animation: rise .4s var(--ease-out) both; }
 .voice-preview audio, .reply audio { max-width: 100%; height: 40px; }
 .voice-tag { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Message from him + visits */
+.love-note { background: var(--paper); border: 2px solid var(--accent); border-radius: 18px; padding: 20px 22px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; animation: rise .7s var(--ease-out) both; }
+.love-note .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--accent); }
+.love-note .note { margin: 0; overflow-wrap: anywhere; }
+.love-when { font-size: 12px; color: var(--muted); }
+.love-note.fresh { animation: stamp .6s var(--ease-spring) both; }
+.visits { display: flex; flex-direction: column; gap: 8px; }
+.visit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; font-size: 14px; }
+.visit i { font-style: normal; grid-row: span 2; font-size: 18px; line-height: 1.2; }
+.visit small { color: var(--muted); font-size: 12px; }
+.visit.now b { color: var(--accent); }
+
+/* Device polish */
+.foot { display: flex; justify-content: center; padding-top: 8px; }
+.admin-link { background: none; border: 0; color: var(--muted); font-size: 13px; padding: 8px 12px; cursor: pointer; opacity: .7; display: inline-flex; gap: 6px; align-items: center; }
+.admin-link:hover { opacity: 1; color: var(--ink); }
+.admin-link .badge { background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 0 7px; font-size: 12px; }
+.hero h1 { line-height: 1.08; }
+.tiles { grid-template-columns: 1fr 1fr; }
+.drawer.full .tiles { grid-template-columns: repeat(4, 1fr); }
+.tile b { font-size: 22px; }
+.tabs { overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { white-space: nowrap; flex: none; }
+@media (max-width: 420px) {
+  .stub { letter-spacing: .08em; font-size: 11px; }
+  .dhead { padding: 12px 14px; }
+  .dhead .btn.small { padding: 6px 10px; font-size: 13px; }
+  .tabs { padding-inline: 10px; }
+  .tab { padding: 8px 9px; font-size: 14px; }
+  .dbody { padding: 14px; }
+}
 </style>
 </head>
 <body>
@@ -337,6 +370,11 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   <section id="empty" class="ticket empty"><h2>Chargement du billet…</h2></section>
   <div id="content" hidden>
     <div class="wrap" style="padding:0">
+      <section id="loveNote" class="love-note" hidden>
+        <div class="eyebrow">Message de <span id="loveFrom"></span></div>
+        <p class="note" id="loveText"></p>
+        <span class="love-when" id="loveWhen"></span>
+      </section>
       <section id="plan" class="plan" hidden>
         <div class="eyebrow">C'est confirmé</div>
         <h2 id="planWhat"></h2>
@@ -379,8 +417,8 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       </form>
     </div>
   </div>
+  <footer class="foot"><button class="admin-link" id="fab" type="button" aria-label="Administration">Admin <span class="badge" id="fabBadge" hidden></span></button></footer>
 </main>
-<button class="fab" id="fab" type="button" aria-label="Administration" style="padding:7px 12px;font-size:13px;opacity:.4;top:calc(10px + env(safe-area-inset-top, 0px));bottom:auto">Admin <span class="badge" id="fabBadge" hidden></span></button>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Administration" aria-hidden="true">
   <div class="dhead"><div><h3>Admin</h3><div class="status" id="saveState" data-s="idle">Verrouillé</div></div>
@@ -391,7 +429,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     <label class="toggle"><input type="checkbox" id="remember" checked> Rester connecté sur cet appareil</label>
     <button class="btn" type="submit" id="loginBtn">Se connecter</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
-    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 25</span>
+    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 02 h 30</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
@@ -403,17 +441,26 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       <div class="tile"><b id="tCount">0</b><span>Réponses reçues</span></div>
       <div class="tile"><b id="tLast">—</b><span>Dernière réponse</span></div>
       <div class="tile"><b id="tHype">—</b><span>Impatience moyenne</span></div>
+      <div class="tile"><b id="tSeen">—</b><span id="tSeenLbl">Dernière visite</span></div>
     </div>
     <div class="row wrap-row">
       <button class="btn small" type="button" id="goInbox">Voir toutes les réponses</button>
       <button class="btn ghost small" type="button" id="testReply">Envoyer une réponse test</button>
       <button class="btn ghost small" type="button" id="fullBtn">Plein écran</button>
     </div>
+    <section class="adm-sec"><h4>Ses visites</h4><p class="hint" style="margin:0">Chaque fois qu'elle ouvre le billet, et quand elle clique sur Oui. Tes propres visites ne sont pas comptées.</p><div class="visits" id="visits"></div></section>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
-    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 25. Si tu vois une autre date, recharge la page.</p>
+    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 02 h 30. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
+    <section class="adm-sec" id="replyBox">
+      <h4>Lui répondre sur le site</h4>
+      <p class="hint" style="margin:0">Ton message s'affiche en haut de sa page, en quelques secondes. Toute personne qui a le lien du billet peut aussi le lire.</p>
+      <textarea class="field hand" id="adminMsg" maxlength="300" rows="3" placeholder="Ex. C'est noté, je passe te chercher à 19 h 💌"></textarea>
+      <div class="row wrap-row"><button class="btn small" type="button" id="adminMsgSend">Envoyer</button><button class="btn ghost small" type="button" id="adminMsgDel">Retirer le message</button></div>
+      <span class="hint" style="margin:0" id="adminMsgState"></span>
+    </section>
     <p class="hint" style="margin:0" id="inboxHint"></p>
     <div class="list" id="inbox"></div>
   </div>
@@ -515,6 +562,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     $("#ticketNo").textContent = "N° " + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, "0") + "-" + ((cfg.toName || "x").length * 37 + 100);
     $("#acts").innerHTML = (cfg.activities || []).map((a, i) => !a.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.acts.has(String(i))}">${esc(a)}</button>`).join("");
     $("#slots").innerHTML = (cfg.slots || []).map((s, i) => !s.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.slot === String(i)}">${esc(s)}</button>`).join("");
+    renderLoveNote();
     const p = cfg.confirmed; $("#plan").hidden = !(p && p.what);
     if (p && p.what) {
       $("#planWhat").textContent = p.what;
@@ -524,6 +572,23 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     }
   }
   setInterval(() => cfg && cfg.confirmed && cfg.confirmed.what && tick(), 1000);
+  // Son message à lui, en haut de sa page
+  let shownNote = null;
+  function renderLoveNote() {
+    const m = cfg.adminMessage, has = !!(m && m.text && m.text.trim());
+    $("#loveNote").hidden = !has;
+    if (!has) { shownNote = ""; return; }
+    $("#loveFrom").textContent = (cfg.fromName || "").trim() || "moi";
+    $("#loveText").textContent = m.text;
+    $("#loveWhen").textContent = m.at ? new Date(m.at).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "";
+    const key = m.text + "|" + m.at;
+    if (shownNote !== null && shownNote !== key && !unlockedView()) {
+      const el = $("#loveNote"); el.classList.remove("fresh"); void el.offsetWidth; el.classList.add("fresh");
+      hearts(50, innerWidth / 2, 120); toast("💌 Nouveau message pour toi");
+    }
+    shownNote = key;
+  }
+  const unlockedView = () => document.body.classList.contains("admin-open");
   function tick() {
     const p = cfg.confirmed, el = $("#planCount"); const ms = new Date(p.when) - Date.now();
     if (!p.when || isNaN(ms)) { el.innerHTML = ""; return; }
@@ -604,7 +669,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
 
   // Oui : le seul bouton qui marche
   $("#yesBtn").addEventListener("click", (e) => {
-    Music.start(cfg && cfg.music); const r = e.currentTarget.getBoundingClientRect(); hearts(70, r.left + r.width / 2, r.top);
+    Music.start(cfg && cfg.music); track("yes"); const r = e.currentTarget.getBoundingClientRect(); hearts(70, r.left + r.width / 2, r.top);
     $("#yesno").innerHTML = `<p class="said-yes">Je le savais ! Alors dis-moi tout juste en dessous ↓</p>`;
     $("#form").hidden = false;
     setTimeout(() => $("#form").scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 400);
@@ -654,6 +719,28 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const url = NTFY + "?title=" + encodeURIComponent(title) + (file ? "&filename=vocal.bin&message=" + encodeURIComponent(body) : "");
     const r = await fetch(url, { method: "POST", body: file || body });
     if (!r.ok) throw new Error("ntfy " + r.status);
+  }
+
+  // Visites : « elle a ouvert le billet », « elle a cliqué sur Oui » (chiffré, seul l'admin peut lire)
+  const VISITS = NTFY + "-v";
+  function deviceName() {
+    const ua = navigator.userAgent;
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "iPad";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/Android/.test(ua)) return /Mobile/.test(ua) ? "Android" : "tablette Android";
+    return "ordinateur";
+  }
+  let trackedYes = false;
+  async function track(kind) {
+    try {
+      if (localStorage.getItem("rdv-admin-device") || location.hash === "#admin" || unlocked) return; // tes visites ne comptent pas
+      if (kind === "yes") { if (trackedYes) return; trackedYes = true; }
+      if (kind === "open") { const last = +localStorage.getItem("rdv-seen") || 0; if (Date.now() - last < 10 * 60e3) return; localStorage.setItem("rdv-seen", Date.now()); }
+    } catch {}
+    try {
+      const title = kind === "yes" ? "💗 Elle a cliqué sur Oui" : "👀 Elle a ouvert le billet";
+      await fetch(VISITS + "?title=" + encodeURIComponent(title), { method: "POST", body: await sealReply({ kind, device: deviceName(), at: Date.now() }) });
+    } catch {}
   }
 
   // Enregistrement du vocal : capté en direct et rangé en WAV, un format que tous les téléphones lisent (iPhone compris)
@@ -761,7 +848,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       clearVoice();
       hearts(80, innerWidth / 2, innerHeight * .8); toast("Réponse envoyée 💌");
       btn.textContent = "Envoyée ✓"; pop(btn); setTimeout(() => (btn.textContent = "Envoyer ma réponse"), 2400);
-      $("#sentNote").innerHTML = "Envoyée à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + "." + (wa ? ` <a href="${esc(wa)}" target="_blank" rel="noopener">Me l'envoyer aussi sur WhatsApp</a>` : "");
+      $("#sentNote").innerHTML = "Envoyée à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + "." + (wa ? ` <a href="${esc(wa)}" target="_blank" rel="noopener">Me l'envoyer aussi sur WhatsApp</a>` : "") + "<br>Je pourrai te répondre ici, en haut de cette page.";
     } catch {
       btn.textContent = "Envoyer ma réponse";
       hearts(60, innerWidth / 2, innerHeight * .8);
@@ -813,6 +900,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     privKey = signKey = null; unlocked = false; editing = false; inbox.clear();
     try { localStorage.removeItem("rdv-session"); } catch {}
     if (replyES) { replyES.close(); replyES = null; }
+    if (visitES) { visitES.close(); visitES = null; } visits.clear();
     renderInbox(); applyLock(); setSave("Déconnecté", "idle"); toast("Tu es déconnecté");
   }
   $("#lock").addEventListener("submit", async (e) => {
@@ -824,6 +912,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     try {
       await login(code, $("#remember").checked);
       unlocked = true; $("#lockCode").value = ""; $("#lockErr").textContent = "";
+      try { localStorage.setItem("rdv-admin-device", "1"); } catch {}
       applyLock(); setSave("Connecté ✓", "ok"); toast("Connecté"); syncInbox();
     } catch { $("#lockErr").textContent = "Connexion impossible sur ce navigateur. Mets-le à jour ou essaie Chrome ou Safari."; }
     finally { $("#loginBtn").disabled = false; $("#loginBtn").textContent = "Se connecter"; }
@@ -942,8 +1031,38 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     }
     btn.disabled = false; btn.textContent = "Vocal pas encore disponible : réessaie dans quelques minutes";
   }
+  // Visites
+  const visits = new Map(); let visitES = null;
+  async function addVisit(id, time, sealed) {
+    if (!privKey || visits.has(id)) return false;
+    try { visits.set(id, { time, data: await openReply(sealed) }); return true; } catch { return false; }
+  }
+  async function syncVisits() {
+    if (!privKey) return;
+    try {
+      const r = await fetch(REPO + "visits.json", { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } });
+      if (r.ok) for (const it of (await r.json()).items || []) await addVisit(it.id, it.time, it.sealed);
+    } catch {}
+    try {
+      const t = await (await fetch(VISITS + "/json?poll=1&since=all", { cache: "no-store" })).text();
+      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") await addVisit(ev.id, ev.time, ev.message); }
+    } catch {}
+    renderDash();
+    if (!visitES && window.EventSource) {
+      visitES = new EventSource(VISITS + "/sse");
+      visitES.onmessage = async (e) => {
+        let ev; try { ev = JSON.parse(e.data); } catch { return; }
+        if (ev.event === "message" && await addVisit(ev.id, ev.time, ev.message)) {
+          renderDash(); toast(visits.get(ev.id).data.kind === "yes" ? "💗 Elle vient de cliquer sur Oui !" : "👀 Elle regarde le billet en ce moment");
+        }
+      };
+    }
+  }
+  setInterval(() => { if (unlocked) renderDash(); }, 30000); // « il y a … » reste juste
+
   async function syncInbox() {
     if (!privKey) return;
+    syncVisits();
     try {
       const r = await fetch(REPO + "replies.json", { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } });
       if (r.ok) for (const it of (await r.json()).items || []) await addSealed(it.id, it.time, it.sealed, it.voice ? repoVoice(it.voice) : []);
@@ -975,6 +1094,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
         ${d.note ? `<div class="msg">${esc(d.note)}</div>` : ""}
         ${d.voice ? `<button type="button" class="btn small voice-tag" data-play="${esc(id)}">▶ Écouter son vocal (${fmt(+d.voice.dur || 0)})</button>` : ""}
         <div class="acts"><button type="button" class="btn small" data-use="${esc(id)}">Utiliser pour le plan</button>
+        <button type="button" class="btn ghost small" data-answer="1">Lui répondre</button>
         <button type="button" class="btn ghost small" data-rm="${esc(id)}">Supprimer</button></div></div>`;
     }).join("") || (privKey ? `<p class="hint" style="margin:0">Pas encore de réponse. Quand elle envoie la sienne, elle apparaît ici tout de suite.</p>` : "");
   }
@@ -1002,6 +1122,14 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     $("#tCount").textContent = list.length;
     $("#tLast").textContent = times.length ? ago(times[0]) : "—";
     $("#tHype").textContent = list.length ? Math.round(list.reduce((a, r) => a + (+r.data.hype || 0), 0) / list.length) + " %" : "—";
+    const vs = [...visits.values()].map((v) => ({ ...v.data, at: v.data.at || v.time * 1000 })).sort((a, b) => b.at - a.at);
+    const live = vs.length && Date.now() - vs[0].at < 3 * 60e3;
+    $("#tSeen").textContent = vs.length ? (live ? "En ce moment" : ago(vs[0].at)) : "—";
+    $("#tSeenLbl").textContent = vs.length ? "Dernière visite · " + vs[0].device : "Dernière visite";
+    $("#visits").innerHTML = vs.slice(0, 15).map((v, i) => `<div class="visit${i === 0 && live ? " now" : ""}"><i>${v.kind === "yes" ? "💗" : "👀"}</i>
+      <b>${v.kind === "yes" ? "A cliqué sur Oui" : "A ouvert le billet"}</b>
+      <small>${esc(new Date(v.at).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))} · ${esc(v.device)}</small></div>`).join("")
+      || `<span class="hint" style="margin:0">Pas encore de visite. Dès qu'elle ouvre le lien, tu le vois ici.</span>`;
     const acts = {}, slots = {};
     list.forEach((r) => { (r.data.activities || []).forEach((a) => (acts[a] = (acts[a] || 0) + 1)); if (r.data.idea) acts["💡 " + r.data.idea] = (acts["💡 " + r.data.idea] || 0) + 1; [r.data.slot, r.data.slotCustom].filter(Boolean).forEach((x) => (slots[x] = (slots[x] || 0) + 1)); });
     $("#dashActs").innerHTML = bars("Activités", acts); $("#dashSlots").innerHTML = bars("Moments", slots);
@@ -1028,6 +1156,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   });
   $("#inbox").addEventListener("click", (e) => {
     const play = e.target.closest("button[data-play]"); if (play) { playVoice(play.dataset.play, play); return; }
+    if (e.target.closest("button[data-answer]")) { $("#replyBox").scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => $("#adminMsg").focus(), 300); return; }
     const rm = e.target.closest("button[data-rm]"), use = e.target.closest("button[data-use]");
     if (rm) {
       if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Confirmer la suppression"; return; }
@@ -1044,6 +1173,20 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     }
   });
 
+  // Lui répondre sur le site
+  function fillAdminMsg() {
+    const m = cfg && cfg.adminMessage;
+    if (document.activeElement !== $("#adminMsg")) $("#adminMsg").value = (m && m.text) || "";
+    $("#adminMsgState").textContent = m && m.text ? "Affiché sur sa page depuis le " + new Date(m.at).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + "." : "Aucun message affiché pour l'instant.";
+    $("#adminMsgDel").hidden = !(m && m.text);
+  }
+  $("#adminMsgSend").addEventListener("click", () => {
+    const text = $("#adminMsg").value.trim();
+    if (!text) { toast("Écris d'abord ton message"); return; }
+    cfg.adminMessage = { text, at: Date.now() }; render(); fillAdminMsg(); queuePublish(); toast("Message envoyé : elle le voit en haut de sa page");
+  });
+  $("#adminMsgDel").addEventListener("click", () => { cfg.adminMessage = null; $("#adminMsg").value = ""; render(); fillAdminMsg(); queuePublish(); toast("Message retiré"); });
+
   // Formulaire de modification
   function listHtml(key, items, ph) {
     return items.map((v, i) => `<div class="row"><input class="field" data-list="${key}" data-i="${i}" maxlength="60" value="${esc(v)}" placeholder="${ph}" aria-label="${ph}">
@@ -1055,6 +1198,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
   }
   function fillAdmin() {
     if (!cfg) return;
+    fillAdminMsg();
     $("#moods").innerHTML = Object.entries(MOODS).map(([k, c]) => `<button type="button" class="sw" title="${k}" aria-label="${k}" data-mood="${k}" style="background:${c}" aria-pressed="${(cfg.mood || "cerise") === k}"></button>`).join("");
     if (!$("#adminBody").contains(document.activeElement) || !document.activeElement.dataset.list) fillLists();
     document.querySelectorAll("#adminBody [data-k]").forEach((el) => { if (el !== document.activeElement) el.value = cfg[el.dataset.k] ?? ""; });
@@ -1096,6 +1240,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     listenConfig();
     if (await restoreSession()) { unlocked = true; setSave("Connecté ✓", "ok"); syncInbox(); }
     if (location.hash === "#admin") openDrawer(true);
+    setTimeout(() => track("open"), 2500);
   })();
   setInterval(() => { if (!document.hidden) loadRepoConfig(); }, 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadRepoConfig(); loadRelayConfig(); } });

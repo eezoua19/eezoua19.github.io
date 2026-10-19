@@ -54,3 +54,17 @@ for (const ev of await poll(REPLY_TOPIC)) {
 for (const x of store.items) if (deleted.has(x.id) && x.voice) fs.rmSync(`site/${x.voice}`, { force: true });
 store.items = store.items.filter((x) => !deleted.has(x.id)).slice(-500);
 if (JSON.stringify(store) !== before) { fs.writeFileSync(REPLIES, JSON.stringify(store, null, 1) + "\n"); console.log("replies.json:", store.items.length, "replies"); }
+
+// 3. Visits ("she opened the ticket"), encrypted like the replies
+const VISITS = "site/visits.json";
+const vstore = fs.existsSync(VISITS) ? JSON.parse(fs.readFileSync(VISITS, "utf8")) : { items: [] };
+const vbefore = JSON.stringify(vstore);
+for (const ev of await poll(REPLY_TOPIC + "-v")) {
+  try {
+    const m = JSON.parse(ev.message);
+    if (!m.e || !m.iv || !m.c || !/^[A-Za-z0-9]+$/.test(ev.id) || vstore.items.some((x) => x.id === ev.id)) continue;
+    vstore.items.push({ id: ev.id, time: ev.time, sealed: ev.message });
+  } catch {}
+}
+vstore.items = vstore.items.slice(-300);
+if (JSON.stringify(vstore) !== vbefore) { fs.writeFileSync(VISITS, JSON.stringify(vstore, null, 1) + "\n"); console.log("visits.json:", vstore.items.length, "visits"); }
