@@ -261,6 +261,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .music-btn .eq i:nth-child(2) { animation-delay: -.3s; }
 .music-btn .eq i:nth-child(3) { animation-delay: -.6s; }
 @keyframes eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+
+.lockbox { flex: none; }
+@media (min-width: 900px) {
+  body { transition: padding-right .5s var(--ease-out); }
+  body.admin-open { padding-right: calc(min(460px, 100%) + 24px); }
+  body.admin-open .scrim { opacity: 0; pointer-events: none; }
+}
 </style>
 
 <canvas id="hearts" aria-hidden="true"></canvas>
@@ -340,7 +347,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <div><h3>Admin</h3><div class="save-state" id="saveState">Tout est enregistré</div></div>
     <button class="btn ghost small" id="closeDrawer" type="button">Fermer</button>
   </div>
-  <form class="dbody" id="lock" style="flex:0">
+  <form class="dbody lockbox" id="lock">
     <label class="af"><span>Code administrateur</span>
       <input class="field" id="lockCode" type="password" autocomplete="current-password" placeholder="Entre ton code"></label>
     <button class="btn" type="submit">Déverrouiller</button>
@@ -749,7 +756,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       $("#lockCode").value = ""; $("#lockErr").textContent = ""; applyLock(); fillAdmin(); toast("Admin déverrouillé");
     } else { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); }
   });
-  function openDrawer(open) { drawer.classList.toggle("open", open); $("#scrim").classList.toggle("show", open); drawer.setAttribute("aria-hidden", !open); applyLock(); if (open && unlocked) fillAdmin(); if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300); }
+  function openDrawer(open) { document.body.classList.toggle("admin-open", open); drawer.classList.toggle("open", open); $("#scrim").classList.toggle("show", open); drawer.setAttribute("aria-hidden", !open); applyLock(); if (open && unlocked) fillAdmin(); if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300); }
   $("#fab").addEventListener("click", () => openDrawer(!drawer.classList.contains("open")));
   $("#closeDrawer").addEventListener("click", () => openDrawer(false));
   $("#scrim").addEventListener("click", () => openDrawer(false));

@@ -267,6 +267,30 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .music-btn .eq i:nth-child(2) { animation-delay: -.3s; }
 .music-btn .eq i:nth-child(3) { animation-delay: -.6s; }
 @keyframes eq { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+
+/* Admin panel layout */
+:root { --warn: #b86e00; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --warn: #f2b14c; } }
+:root[data-theme="dark"] { --warn: #f2b14c; }
+.lockbox { flex: none; }
+.adm-sec { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.adm-sec h4 { margin: 0; font-family: var(--f-display); font-size: 17px; }
+.adm-sec .field { background: var(--paper); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.two > * { min-width: 0; }
+@media (max-width: 420px) { .two { grid-template-columns: 1fr; } }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.wrap-row { flex-wrap: wrap; }
+.status { display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--soft); color: var(--ink); }
+.status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.status[data-s="ok"]::before { background: var(--ok); }
+.status[data-s="busy"]::before { background: var(--accent); animation: ping 1.2s infinite; }
+.status[data-s="warn"]::before { background: var(--warn); }
+@media (min-width: 900px) {
+  body { transition: padding-right .5s var(--ease-out); }
+  body.admin-open { padding-right: calc(min(460px, 100%) + 24px); }
+  body.admin-open .scrim { opacity: 0; pointer-events: none; }
+}
 </style>
 </head>
 <body>
@@ -312,36 +336,52 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 <button class="fab" id="fab" type="button" aria-label="Administration" style="padding:7px 12px;font-size:13px;opacity:.4;top:calc(10px + env(safe-area-inset-top, 0px));bottom:auto">Admin</button>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Administration" aria-hidden="true">
-  <div class="dhead"><div><h3>Admin</h3><div class="save-state" id="saveState">Tes modifications partent en ligne toutes seules</div></div>
+  <div class="dhead"><div><h3>Admin</h3><div class="status" id="saveState" data-s="idle">Verrouillé</div></div>
     <button class="btn ghost small" id="closeDrawer" type="button">Fermer</button></div>
-  <form class="dbody" id="lock" style="flex:0">
+  <form class="dbody lockbox" id="lock">
     <label class="af"><span>Code administrateur</span>
       <input class="field" id="lockCode" type="password" autocomplete="current-password" placeholder="Entre ton code"></label>
     <button class="btn" type="submit">Déverrouiller</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
   </form>
   <div class="dbody" id="adminBody" hidden>
-    <label class="af"><span>Ton prénom</span><input class="field" data-k="fromName" maxlength="40"></label>
-    <label class="af"><span>Son prénom</span><input class="field" data-k="toName" maxlength="40"></label>
-    <label class="af"><span>Titre</span><input class="field" data-k="title" maxlength="80"></label>
-    <label class="af"><span>Ton message</span><textarea class="field hand" data-k="intro" maxlength="800"></textarea></label>
-    <label class="af"><span>La question</span><input class="field" data-k="question" maxlength="100"></label>
-    <label class="af"><span>Ambiance</span><select class="field" data-k="mood">
-      <option value="cerise">Cerise</option><option value="menthe">Menthe</option><option value="lavande">Lavande</option><option value="soleil">Soleil</option><option value="nuit">Nuit</option></select></label>
-    <label class="af"><span>Ton numéro WhatsApp (ex. 33612345678)</span><input class="field" data-k="whatsapp" inputmode="tel" maxlength="20"></label>
-    <label class="af"><span>Activités (une par ligne)</span><textarea class="field" data-k="activities" rows="6"></textarea></label>
-    <label class="af"><span>Créneaux (un par ligne)</span><textarea class="field" data-k="slots" rows="4"></textarea></label>
-    <div class="divider"></div>
-    <label class="af"><span>Plan confirmé : on fait quoi</span><input class="field" data-p="what" maxlength="100" placeholder="Laisse vide pour ne rien afficher"></label>
-    <label class="af"><span>Quand</span><input class="field" data-p="when" type="datetime-local"></label>
-    <label class="af"><span>Où</span><input class="field" data-p="where" maxlength="100"></label>
-    <label class="af"><span>Musique : fichier MP3 mis dans le dossier site/ (optionnel)</span><input class="field" data-k="music" maxlength="120" placeholder="Vide = la petite boîte à musique"></label>
-    <div class="divider"></div>
-    <div class="af"><span>Connexion GitHub (une seule fois par appareil)</span>
-      <p class="hint" style="margin:0" id="ghHint">Colle ton jeton GitHub pour que tes modifications partent en ligne automatiquement. Il reste uniquement sur cet appareil.</p>
-      <input class="field" id="ghToken" type="password" autocomplete="off" placeholder="github_pat_…">
-      <div class="row"><button class="btn small" id="ghSave" type="button">Connecter</button><button class="btn ghost small" id="ghForget" type="button">Oublier le jeton</button></div>
-    </div>
+    <section class="adm-sec" id="ghSec">
+      <h4>Mise en ligne automatique</h4>
+      <p class="hint" style="margin:0" id="ghHint"></p>
+      <input class="field" id="ghToken" type="password" autocomplete="off" placeholder="Colle ton jeton github_pat_…">
+      <div class="row wrap-row"><button class="btn small" id="ghSave" type="button">Connecter GitHub</button><button class="btn ghost small" id="ghForget" type="button">Déconnecter</button></div>
+    </section>
+    <section class="adm-sec">
+      <h4>Le billet</h4>
+      <div class="two"><label class="af"><span>Ton prénom</span><input class="field" data-k="fromName" maxlength="40"></label>
+        <label class="af"><span>Son prénom</span><input class="field" data-k="toName" maxlength="40"></label></div>
+      <label class="af"><span>Titre</span><input class="field" data-k="title" maxlength="80"></label>
+      <label class="af"><span>Ton message</span><textarea class="field hand" data-k="intro" maxlength="800" rows="4"></textarea></label>
+      <label class="af"><span>La question</span><input class="field" data-k="question" maxlength="100"></label>
+      <div class="af"><span>Couleur</span><div class="swatches" id="moods"></div></div>
+    </section>
+    <section class="adm-sec">
+      <h4>Activités proposées</h4>
+      <div class="list" id="listActs"></div>
+      <button class="btn ghost small" type="button" data-add="activities">+ Ajouter une activité</button>
+    </section>
+    <section class="adm-sec">
+      <h4>Créneaux proposés</h4>
+      <div class="list" id="listSlots"></div>
+      <button class="btn ghost small" type="button" data-add="slots">+ Ajouter un créneau</button>
+    </section>
+    <section class="adm-sec">
+      <h4>Rendez-vous confirmé</h4>
+      <p class="hint" style="margin:0">Remplis « On fait quoi » pour afficher le plan et le compte à rebours en haut de sa page. Vide = rien n'apparaît.</p>
+      <label class="af"><span>On fait quoi</span><input class="field" data-p="what" maxlength="100" placeholder="Ex. Ciné puis resto"></label>
+      <div class="two"><label class="af"><span>Quand</span><input class="field" data-p="when" type="datetime-local"></label>
+        <label class="af"><span>Où</span><input class="field" data-p="where" maxlength="100"></label></div>
+    </section>
+    <section class="adm-sec">
+      <h4>Réponse et musique</h4>
+      <label class="af"><span>Ton numéro WhatsApp</span><input class="field" data-k="whatsapp" inputmode="tel" maxlength="20" placeholder="Ex. 33612345678 (sans + ni espaces)"></label>
+      <label class="af"><span>Musique (MP3 dans le dossier site/)</span><input class="field" data-k="music" maxlength="120" placeholder="Vide = la petite boîte à musique"></label>
+    </section>
   </div>
 </aside>
 <button class="music-btn" id="musicBtn" type="button" aria-pressed="false" hidden><span class="eq" aria-hidden="true"><i></i><i></i><i></i></span><span id="musicLabel">Musique</span></button>
@@ -402,8 +442,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $("#question").textContent = cfg.question || "Tu veux qu'on se voie ?";
     const d = new Date();
     $("#ticketNo").textContent = "N° " + String(d.getFullYear()).slice(2) + String(d.getMonth() + 1).padStart(2, "0") + "-" + ((cfg.toName || "x").length * 37 + 100);
-    $("#acts").innerHTML = (cfg.activities || []).map((a, i) => `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.acts.has(String(i))}">${esc(a)}</button>`).join("");
-    $("#slots").innerHTML = (cfg.slots || []).map((s, i) => `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.slot === String(i)}">${esc(s)}</button>`).join("");
+    $("#acts").innerHTML = (cfg.activities || []).map((a, i) => !a.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.acts.has(String(i))}">${esc(a)}</button>`).join("");
+    $("#slots").innerHTML = (cfg.slots || []).map((s, i) => !s.trim() ? "" : `<button type="button" class="chip" data-id="${i}" aria-pressed="${sel.slot === String(i)}">${esc(s)}</button>`).join("");
     const p = cfg.confirmed; $("#plan").hidden = !(p && p.what);
     if (p && p.what) {
       $("#planWhat").textContent = p.what;
@@ -539,15 +579,27 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   let token = ""; try { token = localStorage.getItem("rdv-gh") || ""; } catch {}
   try { unlocked = sessionStorage.getItem("rdv-admin") === CODE_HASH; } catch {}
   async function sha(t) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rdv-salt:" + t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
-  const setSave = (t) => ($("#saveState").textContent = t);
+  const MOODS = { cerise: "#d81e4b", menthe: "#0b8a6b", lavande: "#6a3fd1", soleil: "#c25600", nuit: "#2f4fd6" };
+  function setSave(t, state) { const el = $("#saveState"); el.textContent = t; el.dataset.s = state || (/✓/.test(t) ? "ok" : /…/.test(t) ? "busy" : "warn"); }
   function ghUi() {
-    $("#ghHint").textContent = token ? "Connecté : chaque modification est mise en ligne automatiquement." : "Colle ton jeton GitHub pour que tes modifications partent en ligne automatiquement. Il reste uniquement sur cet appareil.";
+    $("#ghHint").textContent = token ? "GitHub est connecté sur cet appareil : chaque modification part en ligne toute seule, en quelques secondes." : "Pour l'instant tu vois seulement un aperçu. Colle ton jeton GitHub pour que tes modifications partent en ligne automatiquement. Il reste uniquement sur cet appareil.";
     $("#ghToken").hidden = !!token; $("#ghSave").hidden = !!token; $("#ghForget").hidden = !token;
+    if (!saving && !dirty) setSave(token ? "Connecté ✓" : "Aperçu seulement : GitHub non connecté", token ? "ok" : "warn");
   }
   function applyLock() { $("#lock").hidden = unlocked; $("#adminBody").hidden = !unlocked; editing = unlocked && drawer.classList.contains("open"); if (unlocked) { fillAdmin(); ghUi(); } }
+  function listHtml(key, items, ph) {
+    return items.map((v, i) => `<div class="row"><input class="field" data-list="${key}" data-i="${i}" maxlength="60" value="${esc(v)}" placeholder="${ph}" aria-label="${ph}">
+      <button type="button" class="icon-btn" data-del="${key}" data-i="${i}" aria-label="Supprimer">✕</button></div>`).join("") || `<span class="hint" style="margin:0">Rien pour l'instant.</span>`;
+  }
+  function fillLists() {
+    $("#listActs").innerHTML = listHtml("activities", cfg.activities || [], "Ex. 🍿 Ciné");
+    $("#listSlots").innerHTML = listHtml("slots", cfg.slots || [], "Ex. Samedi soir");
+  }
   function fillAdmin() {
     if (!cfg) return;
-    document.querySelectorAll("#adminBody [data-k]").forEach((el) => { if (el === document.activeElement) return; const v = cfg[el.dataset.k]; el.value = Array.isArray(v) ? v.join("\n") : (v ?? ""); });
+    $("#moods").innerHTML = Object.entries(MOODS).map(([k, c]) => `<button type="button" class="sw" title="${k}" aria-label="${k}" data-mood="${k}" style="background:${c}" aria-pressed="${(cfg.mood || "cerise") === k}"></button>`).join("");
+    if (!$("#adminBody").contains(document.activeElement) || !document.activeElement.dataset.list) fillLists();
+    document.querySelectorAll("#adminBody [data-k]").forEach((el) => { if (el !== document.activeElement) el.value = cfg[el.dataset.k] ?? ""; });
     const p = cfg.confirmed || {}; document.querySelectorAll("#adminBody [data-p]").forEach((el) => { if (el !== document.activeElement) el.value = p[el.dataset.p] || ""; });
   }
 
@@ -578,10 +630,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const gh = (url, opt = {}) => fetch(url, { ...opt, cache: "no-store", headers: { Authorization: "Bearer " + token, Accept: "application/vnd.github+json", ...(opt.headers || {}) } });
   async function getSha() { const r = await gh(API); if (!r.ok) throw r; return (await r.json()).sha; }
   async function push() {
-    if (!token) { setSave("Aperçu seulement : connecte GitHub en bas du panneau"); return; }
+    if (!token) { setSave("Aperçu seulement : GitHub non connecté", "warn"); return; }
     if (saving) { dirty = true; return; }
     saving = true; dirty = false; setSave("Mise en ligne…");
-    const text = JSON.stringify(cfg, null, 2) + "\n";
+    const clean = { ...cfg, activities: (cfg.activities || []).filter((x) => x.trim()), slots: (cfg.slots || []).filter((x) => x.trim()) };
+    const text = JSON.stringify(clean, null, 2) + "\n";
     try {
       let done = false;
       for (let i = 0; i < 3 && !done; i++) {
@@ -589,23 +642,31 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         const r = await gh(API, { method: "PUT", body: JSON.stringify({ message: "Admin : mise à jour du billet", content: b64(text), sha: fileSha }) });
         if (r.ok) { fileSha = (await r.json()).content.sha; lastText = text; done = true; setSave("En ligne ✓ " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })); }
         else if (r.status === 409 || r.status === 422) fileSha = null;
-        else if (r.status === 401 || r.status === 403 || r.status === 404) { setSave("Jeton refusé : reconnecte GitHub en bas du panneau"); done = true; }
+        else if (r.status === 401 || r.status === 403 || r.status === 404) { setSave("Jeton refusé : reconnecte GitHub en haut du panneau"); done = true; }
         else throw r;
       }
       if (!done) dirty = true;
     } catch (e) {
-      if (e && (e.status === 401 || e.status === 403 || e.status === 404)) setSave("Jeton refusé : reconnecte GitHub en bas du panneau");
+      if (e && (e.status === 401 || e.status === 403 || e.status === 404)) setSave("Jeton refusé : reconnecte GitHub en haut du panneau");
       else { setSave("Connexion perdue, nouvel essai…"); dirty = true; }
     } finally { saving = false; if (dirty) { clearTimeout(saveT); saveT = setTimeout(push, 2500); } }
   }
-  function queuePush() { if (!token) { setSave("Aperçu seulement : connecte GitHub en bas du panneau"); return; } setSave("Modification…"); clearTimeout(saveT); saveT = setTimeout(push, 900); }
+  function queuePush() { if (!token) { setSave("Aperçu seulement : GitHub non connecté", "warn"); return; } setSave("Modification…"); clearTimeout(saveT); saveT = setTimeout(push, 900); }
 
   $("#adminBody").addEventListener("input", (e) => {
     const el = e.target;
-    if (el.dataset.k) cfg[el.dataset.k] = /activities|slots/.test(el.dataset.k) ? el.value.split("\n").map((x) => x.trim()).filter(Boolean) : el.value;
+    if (el.dataset.k) cfg[el.dataset.k] = el.value;
     else if (el.dataset.p) cfg.confirmed = { ...(cfg.confirmed || {}), [el.dataset.p]: el.value };
+    else if (el.dataset.list) { const l = [...(cfg[el.dataset.list] || [])]; l[+el.dataset.i] = el.value; cfg[el.dataset.list] = l; }
     else return;
-    if (/activities|slots/.test(el.dataset.k || "")) { sel.acts.clear(); sel.slot = null; }
+    render(); queuePush();
+  });
+  $("#adminBody").addEventListener("click", (e) => {
+    const mood = e.target.closest(".sw[data-mood]"), del = e.target.closest("button[data-del]"), add = e.target.closest("button[data-add]");
+    if (mood) { cfg.mood = mood.dataset.mood; fillAdmin(); }
+    else if (del) { const l = [...(cfg[del.dataset.del] || [])]; l.splice(+del.dataset.i, 1); cfg[del.dataset.del] = l; sel.acts.clear(); sel.slot = null; fillLists(); }
+    else if (add) { const k = add.dataset.add; cfg[k] = [...(cfg[k] || []), ""]; fillLists(); $(`#${k === "activities" ? "listActs" : "listSlots"} .row:last-child input`).focus(); }
+    else return;
     render(); queuePush();
   });
   $("#ghSave").addEventListener("click", async () => {
@@ -627,6 +688,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     } else { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); }
   });
   function openDrawer(open) {
+    document.body.classList.toggle("admin-open", open);
     drawer.classList.toggle("open", open); $("#scrim").classList.toggle("show", open); drawer.setAttribute("aria-hidden", !open); applyLock();
     if (open && !unlocked) setTimeout(() => $("#lockCode").focus(), 300);
     if (!open) { editing = false; if (!saving && !dirty) pull(); }
