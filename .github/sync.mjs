@@ -7,7 +7,7 @@ const RELAY = process.env.RELAY_URL || "https://ntfy.sh/";
 const CFG_TOPIC = "rdv-cfg-e63268770e8d0ae4f6c36f76";
 const REPLY_TOPIC = "rdv-bf33f8acda41ab7dcd2c3bff";
 const SIGN_PUB = {"kty": "EC", "crv": "P-256", "x": "n9pHuz7fSbzrqFOJS-k-kxuUw0gp9pvDCRB55IfL10I", "y": "IQuHGfYrjYeLf9t34z68rQz6fKH1lC1AHt9xfCJyahY"};
-const CONFIG = "site/config.json", REPLIES = "site/replies.json";
+const CONFIG = "site/config.json", REPLIES = "site/replies.json", VOICES = "site/voices";
 
 async function poll(topic) {
   const r = await fetch(RELAY + topic + "/json?poll=1&since=all");
@@ -37,9 +37,20 @@ const deleted = new Set(best.deletedReplies || []);
 for (const ev of await poll(REPLY_TOPIC)) {
   try {
     const m = JSON.parse(ev.message);
-    if (!m.e || !m.iv || !m.c || store.items.some((x) => x.id === ev.id)) continue;
-    store.items.push({ id: ev.id, time: ev.time, sealed: ev.message });
+    if (!m.e || !m.iv || !m.c || !/^[A-Za-z0-9]+$/.test(ev.id) || deleted.has(ev.id)) continue;
+    let item = store.items.find((x) => x.id === ev.id);
+    if (!item) { item = { id: ev.id, time: ev.time, sealed: ev.message }; store.items.push(item); }
+    // Encrypted voice message: the relay keeps the attachment for 3 hours only
+    if (ev.attachment && ev.attachment.url && !item.voice && (ev.attachment.size || 0) < 8e6) {
+      const r = await fetch(ev.attachment.url);
+      if (r.ok) {
+        fs.mkdirSync(VOICES, { recursive: true });
+        fs.writeFileSync(`${VOICES}/${ev.id}.bin`, Buffer.from(await r.arrayBuffer()));
+        item.voice = `voices/${ev.id}.bin`;
+      }
+    }
   } catch {}
 }
+for (const x of store.items) if (deleted.has(x.id) && x.voice) fs.rmSync(`site/${x.voice}`, { force: true });
 store.items = store.items.filter((x) => !deleted.has(x.id)).slice(-500);
 if (JSON.stringify(store) !== before) { fs.writeFileSync(REPLIES, JSON.stringify(store, null, 1) + "\n"); console.log("replies.json:", store.items.length, "replies"); }

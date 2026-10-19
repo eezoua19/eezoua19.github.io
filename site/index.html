@@ -317,6 +317,18 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .drawer.full { width: 100%; }
 .drawer.full .tabs, .drawer.full .dbody { width: 100%; max-width: 860px; margin-inline: auto; }
 body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !important; }
+
+/* Voice message */
+.voice-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rec-btn { display: inline-flex; align-items: center; gap: 10px; }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex: none; }
+.rec-btn.recording { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.rec-btn.recording .rec-dot { background: var(--accent-ink); animation: recpulse 1s ease-in-out infinite; }
+@keyframes recpulse { 50% { transform: scale(.55); opacity: .6; } }
+.rec-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent); }
+.voice-preview { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; animation: rise .4s var(--ease-out) both; }
+.voice-preview audio, .reply audio { max-width: 100%; height: 40px; }
+.voice-tag { display: inline-flex; align-items: center; gap: 6px; }
 </style>
 </head>
 <body>
@@ -354,6 +366,15 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
           <input class="field" id="slotCustom" maxlength="120" placeholder="Autre moment : dis-moi quand tu es libre"></div>
         <div class="q range"><label for="hype">Ton niveau d'impatience</label><input type="range" id="hype" min="0" max="100" value="75"><div class="hype" id="hypeLabel"></div></div>
         <div class="q"><label for="note">Un petit mot pour moi</label><textarea class="field hand" id="note" maxlength="400" placeholder="Écris ce que tu veux…"></textarea></div>
+        <div class="q" id="voiceQ">
+          <span class="lbl">Ou dis-le-moi en vocal</span>
+          <div class="voice-row">
+            <button type="button" class="btn ghost rec-btn" id="recBtn"><span class="rec-dot" aria-hidden="true"></span><span id="recLabel">Enregistrer un vocal</span></button>
+            <span class="rec-time" id="recTime" hidden>0:00</span>
+          </div>
+          <div class="voice-preview" id="voicePreview" hidden><audio id="voiceAudio" controls preload="metadata"></audio><button type="button" class="btn ghost small" id="voiceDel">Supprimer</button></div>
+          <span class="hint" id="voiceHint" style="margin:0">Jusqu'à 1 minute. Seul lui pourra l'écouter.</span>
+        </div>
         <div class="send"><span class="sent-note" id="sentNote"></span><button class="btn" id="sendBtn" type="submit">Envoyer ma réponse</button></div>
       </form>
     </div>
@@ -370,7 +391,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     <label class="toggle"><input type="checkbox" id="remember" checked> Rester connecté sur cet appareil</label>
     <button class="btn" type="submit" id="loginBtn">Se connecter</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
-    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 10</span>
+    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 15</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
@@ -390,7 +411,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     </div>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
-    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 10. Si tu vois une autre date, recharge la page.</p>
+    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 01 h 15. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
     <p class="hint" style="margin:0" id="inboxHint"></p>
@@ -617,12 +638,62 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const c = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
     return JSON.stringify({ v: 1, e: b64buf(await crypto.subtle.exportKey("raw", eph.publicKey)), iv: b64buf(iv), c: b64buf(c) });
   }
-  async function postReply(obj) {
+  // Le vocal est chiffré avec une clé à usage unique, elle-même rangée dans la réponse chiffrée
+  async function postReply(obj, voice) {
+    let file = null;
+    if (voice) {
+      const key = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      file = new Blob([await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, await voice.blob.arrayBuffer())]);
+      obj.voice = { k: b64buf(await crypto.subtle.exportKey("raw", key)), iv: b64buf(iv), type: voice.blob.type, dur: voice.dur };
+    }
     let body = await sealReply(obj);
     while (body.length > 3900 && obj.note) { obj.note = obj.note.slice(0, Math.floor(obj.note.length * .8)); body = await sealReply(obj); }
-    const r = await fetch(NTFY + "?title=" + encodeURIComponent("💌 Nouvelle réponse au billet"), { method: "POST", body });
+    const title = file ? "🎙️ Nouveau message vocal" : "💌 Nouvelle réponse au billet";
+    const url = NTFY + "?title=" + encodeURIComponent(title) + (file ? "&filename=vocal.bin&message=" + encodeURIComponent(body) : "");
+    const r = await fetch(url, { method: "POST", body: file || body });
     if (!r.ok) throw new Error("ntfy " + r.status);
   }
+
+  // Enregistrement du vocal
+  const fmt = (sec) => Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0");
+  let rec = null, recStream = null, chunks = [], voiceBlob = null, voiceDur = 0, recStart = 0, recTimer = 0;
+  if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)) $("#voiceQ").hidden = true;
+  function recType() {
+    for (const t of ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"]) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+    return "";
+  }
+  function recUi(on) {
+    $("#recBtn").classList.toggle("recording", on); $("#recTime").hidden = !on;
+    $("#recLabel").textContent = on ? "Arrêter" : voiceBlob ? "Réenregistrer" : "Enregistrer un vocal";
+  }
+  async function startRec() {
+    try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+    catch { $("#voiceHint").textContent = "Le micro n'est pas autorisé. Autorise-le dans ton navigateur, ou écris ton mot juste au-dessus."; return; }
+    Music.stop();
+    const type = recType(); chunks = [];
+    rec = new MediaRecorder(recStream, type ? { mimeType: type, audioBitsPerSecond: 32000 } : undefined);
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      recStream.getTracks().forEach((t) => t.stop());
+      voiceDur = Math.max(1, Math.round((Date.now() - recStart) / 1000));
+      voiceBlob = new Blob(chunks, { type: (rec.mimeType || type || "audio/webm").split(";")[0] });
+      const a = $("#voiceAudio"); if (a.src) URL.revokeObjectURL(a.src); a.src = URL.createObjectURL(voiceBlob);
+      $("#voicePreview").hidden = false; recUi(false);
+      $("#voiceHint").textContent = "Vocal de " + fmt(voiceDur) + " prêt. Écoute-le, puis envoie ta réponse.";
+    };
+    rec.start(250); recStart = Date.now(); $("#recTime").textContent = "0:00"; recUi(true);
+    $("#voiceHint").textContent = "Ça enregistre… parle-moi.";
+    recTimer = setInterval(() => { const sec = (Date.now() - recStart) / 1000; $("#recTime").textContent = fmt(sec); if (sec >= 60) stopRec(); }, 250);
+  }
+  function stopRec() { clearInterval(recTimer); if (rec && rec.state !== "inactive") rec.stop(); }
+  function clearVoice() {
+    voiceBlob = null; voiceDur = 0; $("#voicePreview").hidden = true;
+    const a = $("#voiceAudio"); if (a.src) URL.revokeObjectURL(a.src); a.removeAttribute("src");
+    recUi(false); $("#voiceHint").textContent = "Jusqu'à 1 minute. Seul lui pourra l'écouter.";
+  }
+  $("#recBtn").addEventListener("click", () => (rec && rec.state === "recording" ? stopRec() : startRec()));
+  $("#voiceDel").addEventListener("click", clearVoice);
   function replyText(d) {
     const lines = ["💌 Réponse au billet de rendez-vous", "Oui ✅"];
     if (d.activities.length) lines.push("On fait : " + d.activities.join(", "));
@@ -631,6 +702,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     if (when) lines.push("Quand : " + when);
     lines.push("Impatience : " + d.hype + " % (" + hypeText(d.hype) + ")");
     if (d.note) lines.push("", d.note);
+    if (d.hasVoice) lines.push("", "🎙️ Je t'ai aussi laissé un message vocal sur le site");
     return lines.join("\n");
   }
   $("#form").addEventListener("submit", async (e) => {
@@ -639,12 +711,15 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       saidYes: true, activities: [...sel.acts].map((i) => cfg.activities[i]).filter(Boolean), idea: $("#idea").value.trim(),
       slot: sel.slot != null ? cfg.slots[sel.slot] || "" : "", slotCustom: $("#slotCustom").value.trim(), hype: +hype.value, note: $("#note").value.trim(), at: Date.now(),
     };
-    if (!d.activities.length && !d.idea && !d.slot && !d.slotCustom && !d.note) { toast("Choisis au moins une activité, un moment ou écris un mot"); return; }
+    if (rec && rec.state === "recording") { toast("Arrête d'abord l'enregistrement du vocal"); return; }
+    if (!d.activities.length && !d.idea && !d.slot && !d.slotCustom && !d.note && !voiceBlob) { toast("Choisis au moins une activité, un moment, écris un mot ou laisse un vocal"); return; }
+    d.hasVoice = !!voiceBlob;
     const btn = $("#sendBtn"), text = replyText(d), num = String(cfg.whatsapp || "").replace(/[^\d]/g, "");
     const wa = num ? "https://wa.me/" + num + "?text=" + encodeURIComponent(text) : "";
     btn.disabled = true; btn.textContent = "Envoi…";
     try {
-      await postReply({ ...d });
+      await postReply({ ...d }, voiceBlob ? { blob: voiceBlob, dur: voiceDur } : null);
+      clearVoice();
       hearts(80, innerWidth / 2, innerHeight * .8); toast("Réponse envoyée 💌");
       btn.textContent = "Envoyée ✓"; pop(btn); setTimeout(() => (btn.textContent = "Envoyer ma réponse"), 2400);
       $("#sentNote").innerHTML = "Envoyée à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + "." + (wa ? ` <a href="${esc(wa)}" target="_blank" rel="noopener">Me l'envoyer aussi sur WhatsApp</a>` : "");
@@ -796,26 +871,45 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     const key = await crypto.subtle.deriveKey({ name: "ECDH", public: eph }, privKey, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
     return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(m.iv) }, key, u8(m.c))));
   }
-  async function addSealed(id, time, sealed) {
-    if (!privKey || inbox.has(id) || isDeleted(id)) return false;
-    try { inbox.set(id, { time, data: await openReply(sealed) }); return true; } catch { return false; } // messages illisibles ignorés
+  // srcs : où récupérer le vocal chiffré (copie GitHub, puis pièce jointe du relais, gardée 3 h)
+  async function addSealed(id, time, sealed, srcs = []) {
+    if (!privKey || isDeleted(id)) return false;
+    const have = inbox.get(id);
+    if (have) { srcs.forEach((x) => { if (!have.srcs.some((y) => y.url === x.url)) have.srcs.push(x); }); return false; }
+    try { inbox.set(id, { time, data: await openReply(sealed), srcs: [...srcs] }); return true; } catch { return false; } // messages illisibles ignorés
+  }
+  const repoVoice = (path) => [{ url: REPO + path, opt: { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } } }, { url: path }];
+  const relayVoice = (ev) => (ev.attachment && ev.attachment.url ? [{ url: ev.attachment.url }] : []);
+  async function playVoice(id, btn) {
+    const r = inbox.get(id); if (!r || !r.data.voice) return;
+    const v = r.data.voice; btn.disabled = true; btn.textContent = "Chargement du vocal…";
+    const key = await crypto.subtle.importKey("raw", u8(v.k), "AES-GCM", false, ["decrypt"]);
+    for (const src of r.srcs) {
+      try {
+        const res = await fetch(src.url, src.opt || {}); if (!res.ok) continue;
+        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(v.iv) }, key, await res.arrayBuffer());
+        const a = document.createElement("audio"); a.controls = true; a.src = URL.createObjectURL(new Blob([plain], { type: v.type || "audio/webm" }));
+        btn.replaceWith(a); a.play().catch(() => {}); return;
+      } catch {}
+    }
+    btn.disabled = false; btn.textContent = "Vocal pas encore disponible : réessaie dans quelques minutes";
   }
   async function syncInbox() {
     if (!privKey) return;
     try {
       const r = await fetch(REPO + "replies.json", { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } });
-      if (r.ok) for (const it of (await r.json()).items || []) await addSealed(it.id, it.time, it.sealed);
+      if (r.ok) for (const it of (await r.json()).items || []) await addSealed(it.id, it.time, it.sealed, it.voice ? repoVoice(it.voice) : []);
     } catch {}
     try {
       const t = await (await fetch(NTFY + "/json?poll=1&since=all", { cache: "no-store" })).text();
-      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") await addSealed(ev.id, ev.time, ev.message); }
+      for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") await addSealed(ev.id, ev.time, ev.message, relayVoice(ev)); }
     } catch {}
     renderInbox();
     if (!replyES && window.EventSource) {
       replyES = new EventSource(NTFY + "/sse");
       replyES.onmessage = async (e) => {
         let ev; try { ev = JSON.parse(e.data); } catch { return; }
-        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message)) { renderInbox(); hearts(30, innerWidth - 60, 60); toast("Nouvelle réponse !"); }
+        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message, relayVoice(ev))) { renderInbox(); hearts(30, innerWidth - 60, 60); toast(inbox.get(ev.id).data.voice ? "Nouveau message vocal !" : "Nouvelle réponse !"); }
       };
     }
   }
@@ -831,6 +925,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
       return `<div class="reply"><div class="top"><span>${esc(when)}</span><span>${d.test ? "Test · " : "A dit oui · "}impatience ${esc(d.hype)} %</span></div>
         ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
         ${d.note ? `<div class="msg">${esc(d.note)}</div>` : ""}
+        ${d.voice ? `<button type="button" class="btn small voice-tag" data-play="${esc(id)}">▶ Écouter son vocal (${fmt(+d.voice.dur || 0)})</button>` : ""}
         <div class="acts"><button type="button" class="btn small" data-use="${esc(id)}">Utiliser pour le plan</button>
         <button type="button" class="btn ghost small" data-rm="${esc(id)}">Supprimer</button></div></div>`;
     }).join("") || (privKey ? `<p class="hint" style="margin:0">Pas encore de réponse. Quand elle envoie la sienne, elle apparaît ici tout de suite.</p>` : "");
@@ -884,6 +979,7 @@ body.admin-full { padding-right: max(16px, env(safe-area-inset-right, 0px)) !imp
     finally { b.disabled = false; b.textContent = "Envoyer une réponse test"; }
   });
   $("#inbox").addEventListener("click", (e) => {
+    const play = e.target.closest("button[data-play]"); if (play) { playVoice(play.dataset.play, play); return; }
     const rm = e.target.closest("button[data-rm]"), use = e.target.closest("button[data-use]");
     if (rm) {
       if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Confirmer la suppression"; return; }
