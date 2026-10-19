@@ -1,11 +1,11 @@
 {
-  "fromName": "Moi",
-  "toName": "Mon cœur",
+  "fromName": "Emmanuel ",
+  "toName": "Andréa ",
   "title": "Toi + moi, bientôt ?",
   "intro": "Ça fait trop longtemps que je ne t'ai pas vue…\nAlors j'ai préparé ce petit billet rien que pour toi.",
   "question": "Tu veux qu'on se voie ?",
   "mood": "cerise",
-  "whatsapp": "",
+  "whatsapp": "+2250700590504",
   "music": "",
   "activities": [
     "🍿 Ciné",
@@ -25,5 +25,12 @@
     "what": "",
     "when": "",
     "where": ""
-  }
+  },
+  "deletedReplies": [
+    "gEBEhWWVHIzF",
+    "p3arXI0NNTW0",
+    "hIcZyKKr6pLV",
+    "0ruWs3Z9AsGq"
+  ],
+  "updatedAt": 1792371507502
 }
