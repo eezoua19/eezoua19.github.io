@@ -323,17 +323,17 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       </article>
       <form class="card" id="form" hidden>
         <div class="q"><span class="lbl">Qu'est-ce qu'on fait ?</span><span class="hint">Choisis tout ce qui te tente.</span><div class="chips" id="acts"></div></div>
-        <div class="q"><label for="idea">Ou propose ton idée</label><input class="field" id="idea" maxlength="200" placeholder="Ex. un pique-nique au bord de l'eau"></div>
+        <div class="q"><label for="idea">Ou propose ton idée</label><input class="field" id="idea" maxlength="120" placeholder="Ex. un pique-nique au bord de l'eau"></div>
         <div class="q"><span class="lbl">Quand ?</span><div class="chips" id="slots"></div>
           <input class="field" id="slotCustom" maxlength="120" placeholder="Autre moment : dis-moi quand tu es libre"></div>
         <div class="q range"><label for="hype">Ton niveau d'impatience</label><input type="range" id="hype" min="0" max="100" value="75"><div class="hype" id="hypeLabel"></div></div>
-        <div class="q"><label for="note">Un petit mot pour moi</label><textarea class="field hand" id="note" maxlength="600" placeholder="Écris ce que tu veux…"></textarea></div>
+        <div class="q"><label for="note">Un petit mot pour moi</label><textarea class="field hand" id="note" maxlength="400" placeholder="Écris ce que tu veux…"></textarea></div>
         <div class="send"><span class="sent-note" id="sentNote"></span><button class="btn" id="sendBtn" type="submit">Envoyer ma réponse</button></div>
       </form>
     </div>
   </div>
 </main>
-<button class="fab" id="fab" type="button" aria-label="Administration" style="padding:7px 12px;font-size:13px;opacity:.4;top:calc(10px + env(safe-area-inset-top, 0px));bottom:auto">Admin</button>
+<button class="fab" id="fab" type="button" aria-label="Administration" style="padding:7px 12px;font-size:13px;opacity:.4;top:calc(10px + env(safe-area-inset-top, 0px));bottom:auto">Admin <span class="badge" id="fabBadge" hidden></span></button>
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Administration" aria-hidden="true">
   <div class="dhead"><div><h3>Admin</h3><div class="status" id="saveState" data-s="idle">Verrouillé</div></div>
@@ -344,6 +344,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <button class="btn" type="submit">Déverrouiller</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
   </form>
+  <div class="tabs" role="tablist" id="tabs" hidden>
+    <button class="tab" role="tab" aria-selected="true" data-tab="inbox" type="button">Réponses <span id="inboxCount"></span></button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="edit" type="button">Modifier</button>
+  </div>
+  <div class="dbody" id="inboxBody" hidden>
+    <p class="hint" style="margin:0" id="inboxHint"></p>
+    <div class="list" id="inbox"></div>
+  </div>
   <div class="dbody" id="adminBody" hidden>
     <section class="adm-sec" id="ghSec">
       <h4>Mise en ligne automatique</h4>
@@ -553,23 +561,57 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   noBtn.addEventListener("click", flee);
   noBtn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") flee(e); });
 
-  // Envoi : message WhatsApp pré-rempli vers ton numéro
+  // Réponses chiffrées : seule la clé privée de l'admin (protégée par son code) peut les lire
+  const BOX = {"pub": {"kty": "EC", "crv": "P-256", "x": "02BtpqL3xsBUWpfImrxWeojoX8Sb0WIEEi8YCjGirM4", "y": "KnzK_tsm1J6h1bHD6xLb0R31k090WZWD7mISfpjw1_M"}, "priv": {"salt": "1eImEkaSEu/R+4cGdMffIg==", "iv": "mgFaKEGnYFdhFQmg", "data": "aneIt5/LW3imyM79meJfVypS5xDX2Ugcw4Fm0X0rFSxAdOH89dCaRmTig49gx+V8tVSYddMl9fZJaZEC9SZdMOsO3FdSUfiv5vHcuzGBplGBJIP6DKET7OMW49WMV4R6Usc7A3dXPL1FNf+a9nHrD8ilPsmV2bA1kxCuMc95UwxvLepyYAuHaOCni0yWG7fsK6nHm60UxxHGFw=="}, "topic": "rdv-bf33f8acda41ab7dcd2c3bff"};
+  const NTFY = "https://ntfy.sh/" + BOX.topic;
+  const u8 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
+  const b64buf = (buf) => { let t = ""; new Uint8Array(buf).forEach((x) => (t += String.fromCharCode(x))); return btoa(t); };
+  const EC = { name: "ECDH", namedCurve: "P-256" };
+  async function sealReply(obj) {
+    const pub = await crypto.subtle.importKey("jwk", { ...BOX.pub, ext: true }, EC, false, []);
+    const eph = await crypto.subtle.generateKey(EC, true, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "ECDH", public: pub }, eph.privateKey, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const c = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(obj)));
+    return JSON.stringify({ v: 1, e: b64buf(await crypto.subtle.exportKey("raw", eph.publicKey)), iv: b64buf(iv), c: b64buf(c) });
+  }
+  async function postReply(obj) {
+    let body = await sealReply(obj);
+    while (body.length > 3900 && obj.note) { obj.note = obj.note.slice(0, Math.floor(obj.note.length * .8)); body = await sealReply(obj); }
+    const r = await fetch(NTFY + "?title=" + encodeURIComponent("💌 Nouvelle réponse au billet"), { method: "POST", body });
+    if (!r.ok) throw new Error("ntfy " + r.status);
+  }
+  function replyText(d) {
+    const lines = ["💌 Réponse au billet de rendez-vous", "Oui ✅"];
+    if (d.activities.length) lines.push("On fait : " + d.activities.join(", "));
+    if (d.idea) lines.push("Mon idée : " + d.idea);
+    const when = [d.slot, d.slotCustom].filter(Boolean).join(" / ");
+    if (when) lines.push("Quand : " + when);
+    lines.push("Impatience : " + d.hype + " % (" + hypeText(d.hype) + ")");
+    if (d.note) lines.push("", d.note);
+    return lines.join("\n");
+  }
   $("#form").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const acts = [...sel.acts].map((i) => cfg.activities[i]);
-    const lines = ["💌 Réponse au billet de rendez-vous", "Oui ✅"];
-    if (acts.length) lines.push("On fait : " + acts.join(", "));
-    if ($("#idea").value.trim()) lines.push("Mon idée : " + $("#idea").value.trim());
-    const when = [sel.slot != null ? cfg.slots[sel.slot] : "", $("#slotCustom").value.trim()].filter(Boolean).join(" / ");
-    if (when) lines.push("Quand : " + when);
-    lines.push("Impatience : " + hype.value + " % (" + hypeText(+hype.value) + ")");
-    if ($("#note").value.trim()) lines.push("", $("#note").value.trim());
-    const text = lines.join("\n");
-    hearts(80, innerWidth / 2, innerHeight * .8);
-    const num = String(cfg.whatsapp || "").replace(/[^\d]/g, "");
-    if (num) { location.href = "https://wa.me/" + num + "?text=" + encodeURIComponent(text); return; }
-    try { await navigator.clipboard.writeText(text); toast("Réponse copiée : envoie-la-moi par message"); }
-    catch { $("#sentNote").textContent = text; }
+    const d = {
+      saidYes: true, activities: [...sel.acts].map((i) => cfg.activities[i]).filter(Boolean), idea: $("#idea").value.trim(),
+      slot: sel.slot != null ? cfg.slots[sel.slot] || "" : "", slotCustom: $("#slotCustom").value.trim(), hype: +hype.value, note: $("#note").value.trim(), at: Date.now(),
+    };
+    if (!d.activities.length && !d.idea && !d.slot && !d.slotCustom && !d.note) { toast("Choisis au moins une activité, un moment ou écris un mot"); return; }
+    const btn = $("#sendBtn"), text = replyText(d), num = String(cfg.whatsapp || "").replace(/[^\d]/g, "");
+    const wa = num ? "https://wa.me/" + num + "?text=" + encodeURIComponent(text) : "";
+    btn.disabled = true; btn.textContent = "Envoi…";
+    try {
+      await postReply({ ...d });
+      hearts(80, innerWidth / 2, innerHeight * .8); toast("Réponse envoyée 💌");
+      btn.textContent = "Envoyée ✓"; pop(btn); setTimeout(() => (btn.textContent = "Envoyer ma réponse"), 2400);
+      $("#sentNote").innerHTML = "Envoyée à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + "." + (wa ? ` <a href="${esc(wa)}" target="_blank" rel="noopener">Me l'envoyer aussi sur WhatsApp</a>` : "");
+    } catch {
+      btn.textContent = "Envoyer ma réponse";
+      hearts(60, innerWidth / 2, innerHeight * .8);
+      if (wa) { location.href = wa; return; }
+      try { await navigator.clipboard.writeText(text); toast("Réponse copiée : envoie-la-moi par message"); } catch { $("#sentNote").textContent = text; }
+    } finally { btn.disabled = false; }
   });
 
   // Admin : seule l'empreinte SHA-256 du code est dans la page
@@ -577,7 +619,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   const API = "https://api.github.com/repos/eezoua19/eezoua19.github.io/contents/site/config.json";
   const drawer = $("#drawer"); let unlocked = false, editing = false;
   let token = ""; try { token = localStorage.getItem("rdv-gh") || ""; } catch {}
-  try { unlocked = sessionStorage.getItem("rdv-admin") === CODE_HASH; } catch {}
   async function sha(t) { const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rdv-salt:" + t)); return [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, "0")).join(""); }
   const MOODS = { cerise: "#d81e4b", menthe: "#0b8a6b", lavande: "#6a3fd1", soleil: "#c25600", nuit: "#2f4fd6" };
   function setSave(t, state) { const el = $("#saveState"); el.textContent = t; el.dataset.s = state || (/✓/.test(t) ? "ok" : /…/.test(t) ? "busy" : "warn"); }
@@ -586,7 +627,115 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $("#ghToken").hidden = !!token; $("#ghSave").hidden = !!token; $("#ghForget").hidden = !token;
     if (!saving && !dirty) setSave(token ? "Connecté ✓" : "Aperçu seulement : GitHub non connecté", token ? "ok" : "warn");
   }
-  function applyLock() { $("#lock").hidden = unlocked; $("#adminBody").hidden = !unlocked; editing = unlocked && drawer.classList.contains("open"); if (unlocked) { fillAdmin(); ghUi(); } }
+  let curTab = "inbox";
+  function selectTab(t) {
+    curTab = t;
+    document.querySelectorAll("#tabs .tab").forEach((b) => b.setAttribute("aria-selected", b.dataset.tab === t));
+    $("#inboxBody").hidden = !unlocked || t !== "inbox"; $("#adminBody").hidden = !unlocked || t !== "edit";
+  }
+  document.querySelectorAll("#tabs .tab").forEach((b) => b.addEventListener("click", () => selectTab(b.dataset.tab)));
+  function applyLock() { $("#lock").hidden = unlocked; $("#tabs").hidden = !unlocked; selectTab(curTab); editing = unlocked && drawer.classList.contains("open"); if (unlocked) { fillAdmin(); ghUi(); renderInbox(); } }
+
+  // Boîte de réponses : messages chiffrés relayés par ntfy.sh, gardés dans site/replies.json quand GitHub est connecté
+  const RAPI = "https://api.github.com/repos/eezoua19/eezoua19.github.io/contents/site/replies.json";
+  let privKey = null, store = { items: [], deleted: [] }, storeSha = null, es = null;
+  const inbox = new Map();
+  async function unlockPriv(code) {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(code), "PBKDF2", false, ["deriveKey"]);
+    const k = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: u8(BOX.priv.salt), iterations: 250000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    const pk = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(BOX.priv.iv) }, k, u8(BOX.priv.data));
+    privKey = await crypto.subtle.importKey("pkcs8", pk, EC, false, ["deriveKey"]);
+  }
+  async function openReply(sealed) {
+    const m = JSON.parse(sealed);
+    const eph = await crypto.subtle.importKey("raw", u8(m.e), EC, false, []);
+    const key = await crypto.subtle.deriveKey({ name: "ECDH", public: eph }, privKey, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(m.iv) }, key, u8(m.c))));
+  }
+  async function addSealed(id, time, sealed) {
+    if (!privKey || inbox.has(id) || store.deleted.includes(id)) return false;
+    try { inbox.set(id, { time, data: await openReply(sealed) }); return true; } catch { return false; } // messages illisibles ignorés
+  }
+  async function loadStore() {
+    const r = await gh(RAPI);
+    if (r.status === 404) { store = { items: [], deleted: [] }; storeSha = null; return; }
+    if (!r.ok) throw r;
+    const j = await r.json(); storeSha = j.sha;
+    const parsed = JSON.parse(new TextDecoder().decode(u8(j.content.replace(/\s/g, ""))));
+    store = { items: parsed.items || [], deleted: parsed.deleted || [] };
+  }
+  async function saveStore() {
+    if (!token) return;
+    for (let i = 0; i < 2; i++) {
+      const body = { message: "Admin : boîte de réponses", content: b64(JSON.stringify(store, null, 1) + "\n") };
+      if (storeSha) body.sha = storeSha;
+      const r = await gh(RAPI, { method: "PUT", body: JSON.stringify(body) });
+      if (r.ok) { storeSha = (await r.json()).content.sha; return; }
+      if (r.status !== 409 && r.status !== 422) return;
+      const mine = store; await loadStore();
+      store = { items: [...store.items, ...mine.items.filter((x) => !store.items.some((y) => y.id === x.id))], deleted: [...new Set([...store.deleted, ...mine.deleted])] };
+    }
+  }
+  function keep(id, time, sealed) { if (!store.items.some((x) => x.id === id)) { store.items.push({ id, time, sealed }); return true; } return false; }
+  async function syncInbox() {
+    if (!privKey) return;
+    if (token) { try { await loadStore(); } catch {} }
+    for (const it of store.items) await addSealed(it.id, it.time, it.sealed);
+    let changed = false;
+    try {
+      const t = await (await fetch(NTFY + "/json?poll=1&since=all", { cache: "no-store" })).text();
+      for (const line of t.split("\n")) {
+        if (!line.trim()) continue;
+        const ev = JSON.parse(line);
+        if (ev.event === "message" && !store.deleted.includes(ev.id)) { await addSealed(ev.id, ev.time, ev.message); if (inbox.has(ev.id) && keep(ev.id, ev.time, ev.message)) changed = true; }
+      }
+    } catch {}
+    if (changed) saveStore().catch(() => {});
+    renderInbox();
+    if (!es && window.EventSource) {
+      es = new EventSource(NTFY + "/sse");
+      es.onmessage = async (e) => {
+        let ev; try { ev = JSON.parse(e.data); } catch { return; }
+        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message)) {
+          if (keep(ev.id, ev.time, ev.message)) saveStore().catch(() => {});
+          renderInbox(); hearts(30, innerWidth - 60, 60); toast("Nouvelle réponse !");
+        }
+      };
+    }
+  }
+  function renderInbox() {
+    const list = [...inbox.entries()].sort((a, b) => b[1].time - a[1].time);
+    $("#fabBadge").hidden = !list.length; $("#fabBadge").textContent = list.length;
+    $("#inboxCount").textContent = list.length ? "(" + list.length + ")" : "";
+    $("#inboxHint").textContent = !privKey ? "Les réponses s'affichent une fois l'admin déverrouillé." :
+      token ? "Les nouvelles réponses arrivent ici en direct et sont gardées dans ton dépôt GitHub." :
+      "Les réponses arrivent ici en direct. Connecte GitHub (onglet Modifier) pour les garder plus de 12 heures.";
+    $("#inbox").innerHTML = list.map(([id, r]) => {
+      const d = r.data, when = new Date((d.at || r.time * 1000)).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+      const tags = [...(d.activities || []), d.idea && "💡 " + d.idea, d.slot && "🗓 " + d.slot, d.slotCustom && "🗓 " + d.slotCustom].filter(Boolean);
+      return `<div class="reply"><div class="top"><span>${esc(when)}</span><span>A dit oui · impatience ${esc(d.hype)} %</span></div>
+        ${tags.length ? `<div class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>` : ""}
+        ${d.note ? `<div class="msg">${esc(d.note)}</div>` : ""}
+        <div class="acts"><button type="button" class="btn small" data-use="${esc(id)}">Utiliser pour le plan</button>
+        <button type="button" class="btn ghost small" data-rm="${esc(id)}">Supprimer</button></div></div>`;
+    }).join("") || (privKey ? `<p class="hint" style="margin:0">Pas encore de réponse. Quand elle envoie la sienne, elle apparaît ici tout de suite.</p>` : "");
+  }
+  $("#inbox").addEventListener("click", (e) => {
+    const rm = e.target.closest("button[data-rm]"), use = e.target.closest("button[data-use]");
+    if (rm) {
+      if (rm.dataset.armed !== "1") { rm.dataset.armed = "1"; rm.textContent = "Confirmer la suppression"; return; }
+      const id = rm.dataset.rm; inbox.delete(id);
+      store.items = store.items.filter((x) => x.id !== id); if (!store.deleted.includes(id)) store.deleted.push(id);
+      saveStore().catch(() => {}); renderInbox(); toast("Réponse supprimée");
+    }
+    if (use) {
+      const r = inbox.get(use.dataset.use); if (!r) return;
+      const d = r.data;
+      cfg.confirmed = { ...(cfg.confirmed || {}), what: [...(d.activities || []).map((a) => a.replace(/^\S+\s/, "")), d.idea].filter(Boolean).join(" + ") };
+      selectTab("edit"); fillAdmin(); render(); queuePush();
+      $('[data-p="when"]').scrollIntoView({ behavior: "smooth", block: "center" }); toast("Plan pré-rempli : choisis la date");
+    }
+  });
   function listHtml(key, items, ph) {
     return items.map((v, i) => `<div class="row"><input class="field" data-list="${key}" data-i="${i}" maxlength="60" value="${esc(v)}" placeholder="${ph}" aria-label="${ph}">
       <button type="button" class="icon-btn" data-del="${key}" data-i="${i}" aria-label="Supprimer">✕</button></div>`).join("") || `<span class="hint" style="margin:0">Rien pour l'instant.</span>`;
@@ -675,7 +824,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     try {
       fileSha = await getSha();
       try { localStorage.setItem("rdv-gh", t); } catch {}
-      $("#ghToken").value = ""; ghUi(); setSave("Connecté ✓ tes modifications partent en ligne toutes seules"); toast("GitHub connecté");
+      $("#ghToken").value = ""; ghUi(); setSave("Connecté ✓"); toast("GitHub connecté"); if (privKey) syncInbox();
     } catch { token = ""; setSave("Ce jeton ne marche pas : vérifie qu'il a l'accès « Contents : Read and write » sur ce dépôt"); }
   });
   $("#ghForget").addEventListener("click", () => { token = ""; fileSha = null; try { localStorage.removeItem("rdv-gh"); } catch {} ghUi(); setSave("Jeton oublié sur cet appareil"); });
@@ -683,8 +832,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     e.preventDefault();
     if (!crypto.subtle) { $("#lockErr").textContent = "Ouvre le site en https pour te connecter."; return; }
     if (await sha($("#lockCode").value) === CODE_HASH) {
-      unlocked = true; try { sessionStorage.setItem("rdv-admin", CODE_HASH); } catch {}
-      $("#lockCode").value = ""; $("#lockErr").textContent = ""; applyLock(); toast("Admin déverrouillé");
+      const code = $("#lockCode").value;
+      unlocked = true; $("#lockCode").value = ""; $("#lockErr").textContent = ""; applyLock(); toast("Admin déverrouillé");
+      try { await unlockPriv(code); } catch { $("#inboxHint").textContent = "Impossible d'ouvrir la boîte de réponses sur cet appareil."; }
+      syncInbox();
     } else { $("#lockErr").textContent = "Code incorrect. Réessaie."; $("#lockCode").select(); }
   });
   function openDrawer(open) {
