@@ -43,27 +43,8 @@
       "updatedAt": 1792407445327
     },
     "8r7ldx": {
-      "toName": "Jade",
-      "title": "Toi + moi, bientôt ?",
-      "intro": "Ça fait trop longtemps que je ne t'ai pas vue…\nAlors j'ai préparé ce petit billet rien que pour toi.",
-      "question": "Tu veux qu'on se voie ?",
-      "mood": "cerise",
-      "activities": [
-        "🍿 Ciné",
-        "🍜 Resto",
-        "🌙 Balade le soir",
-        "🛋️ Soirée film à la maison"
-      ],
-      "slots": [
-        "Vendredi soir",
-        "Samedi après-midi",
-        "Samedi soir",
-        "Dimanche"
-      ],
-      "confirmed": null,
-      "adminMessage": null,
-      "createdAt": 1792460476313,
-      "updatedAt": 1792460502372
+      "deleted": true,
+      "updatedAt": 1792482000753
     }
   }
 }
