@@ -2,7 +2,8 @@ name: Sauvegarder les modifications et les réponses
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # Minutes « calmes » : GitHub saute moins souvent ces créneaux que ceux de :00, :05…
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
 
 permissions:

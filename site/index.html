@@ -441,7 +441,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
     <label class="toggle"><input type="checkbox" id="remember" checked> Rester connecté sur cet appareil</label>
     <button class="btn" type="submit" id="loginBtn">Se connecter</button>
     <span class="hint" id="lockErr" style="margin:0"></span>
-    <span class="hint" style="margin:0">Version du site : 19 oct. 2026, 03 h 00</span>
+    <span class="hint" style="margin:0">Version du site : 22 oct. 2026, 03 h 00</span>
   </form>
   <div class="tabs" role="tablist" id="tabs" hidden>
     <button class="tab" role="tab" aria-selected="true" data-tab="dash" type="button">Tableau de bord</button>
@@ -472,7 +472,7 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
     <section class="adm-sec"><h4>Ses visites</h4><p class="hint" style="margin:0">Chaque fois qu'elle ouvre le billet, et quand elle clique sur Oui. Tes propres visites ne sont pas comptées.</p><div class="visits" id="visits"></div></section>
     <section class="adm-sec"><h4>Ce qu'elle choisit</h4><div class="bars" id="dashActs"></div><div class="bars" id="dashSlots"></div></section>
     <section class="adm-sec"><h4>État du site</h4><div class="checks" id="dashChecks"></div></section>
-    <p class="hint" style="margin:0">Version du site : 19 oct. 2026, 03 h 00. Si tu vois une autre date, recharge la page.</p>
+    <p class="hint" style="margin:0">Version du site : 22 oct. 2026, 03 h 00. Si tu vois une autre date, recharge la page.</p>
   </div>
   <div class="dbody" id="inboxBody" hidden>
     <label class="af"><span>Invitation</span><select class="field" id="invFilter"></select></label>
@@ -1134,28 +1134,67 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
   }
   const repoVoice = (path) => [{ url: REPO + path, opt: { cache: "no-cache", headers: { Accept: "application/vnd.github.raw+json" } } }, { url: path }];
   const relayVoice = (ev) => (ev.attachment && ev.attachment.url ? [{ url: ev.attachment.url }] : []);
+  // Copie des vocaux sur l'appareil de l'admin : le relais efface le fichier audio au bout de 3 h,
+  // alors l'admin en garde une copie (toujours chiffrée) dès qu'il la voit passer.
+  const voiceCache = (() => {
+    let dbp = null;
+    const open = () => dbp || (dbp = new Promise((res, rej) => {
+      const r = indexedDB.open("rdv-voices", 1);
+      r.onupgradeneeded = () => r.result.createObjectStore("v");
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+    const run = async (mode, fn) => {
+      const db = await open();
+      return new Promise((res, rej) => { const t = db.transaction("v", mode), q = fn(t.objectStore("v")); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); });
+    };
+    return {
+      get: (k) => run("readonly", (st) => st.get(k)).catch(() => null),
+      put: (k, v) => run("readwrite", (st) => st.put(v, k)).catch(() => {}),
+    };
+  })();
+  // Renvoie le vocal chiffré : copie de l'appareil, sinon copie GitHub, sinon le relais (3 h)
+  async function voiceData(id) {
+    const r = inbox.get(id); if (!r || !r.data.voice) return { error: "none" };
+    const cached = await voiceCache.get(id); if (cached) return { data: cached };
+    let gone = 0;
+    for (const src of r.srcs) {
+      try {
+        const res = await fetch(src.url, src.opt || {});
+        if (!res.ok) { if (res.status === 404 || res.status === 410) gone++; continue; }
+        const data = await res.arrayBuffer(); voiceCache.put(id, data); return { data };
+      } catch {}
+    }
+    return { error: !r.srcs.length || gone === r.srcs.length ? "expired" : "network" };
+  }
+  let prefetching = false;
+  async function prefetchVoices() {
+    if (prefetching || !privKey) return; prefetching = true;
+    try { for (const [id, r] of inbox) if (r.data.voice) await voiceData(id); } finally { prefetching = false; }
+  }
   async function playVoice(id, btn) {
     const r = inbox.get(id); if (!r || !r.data.voice) return;
     const v = r.data.voice; btn.disabled = true; btn.textContent = "Chargement du vocal…";
-    const key = await crypto.subtle.importKey("raw", u8(v.k), "AES-GCM", false, ["decrypt"]);
-    for (const src of r.srcs) {
-      try {
-        const res = await fetch(src.url, src.opt || {}); if (!res.ok) continue;
-        const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(v.iv) }, key, await res.arrayBuffer());
-        const type = v.type || "audio/webm", a = document.createElement("audio");
-        a.controls = true; a.preload = "auto"; a.setAttribute("playsinline", "");
-        let blob = new Blob([plain], { type });
-        if (type !== "audio/wav" && !a.canPlayType(type)) {
-          try { // ancien vocal (webm) sur iPhone : on le convertit en WAV
-            const dc = new AC(), buf = await dc.decodeAudioData(plain.slice(0)); dc.close();
-            blob = toWav([buf.getChannelData(0)], buf.sampleRate, VOICE_RATE).blob;
-          } catch { btn.disabled = false; btn.textContent = "Ce vocal ne se lit pas sur ce téléphone : écoute-le sur un ordinateur"; return; }
-        }
-        a.src = URL.createObjectURL(blob);
-        btn.replaceWith(a); a.play().catch(() => toast("Appuie sur ▶ pour écouter")); return;
-      } catch {}
+    const got = await voiceData(id);
+    if (!got.data) {
+      btn.disabled = false;
+      btn.textContent = got.error === "expired" ? "Ce vocal a expiré avant d'être sauvegardé (le relais le garde 3 h) : demande-lui de te le renvoyer" : "Téléchargement impossible pour l'instant : vérifie ta connexion et réessaie";
+      return;
     }
-    btn.disabled = false; btn.textContent = "Vocal pas encore disponible : réessaie dans quelques minutes";
+    try {
+      const key = await crypto.subtle.importKey("raw", u8(v.k), "AES-GCM", false, ["decrypt"]);
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(v.iv) }, key, got.data);
+      const type = v.type || "audio/webm", a = document.createElement("audio");
+      a.controls = true; a.preload = "auto"; a.setAttribute("playsinline", "");
+      let blob = new Blob([plain], { type });
+      if (type !== "audio/wav" && !a.canPlayType(type)) {
+        try { // ancien vocal (webm) sur iPhone : on le convertit en WAV
+          const dc = new AC(), buf = await dc.decodeAudioData(plain.slice(0)); dc.close();
+          blob = toWav([buf.getChannelData(0)], buf.sampleRate, VOICE_RATE).blob;
+        } catch { btn.disabled = false; btn.textContent = "Ce vocal ne se lit pas sur ce téléphone : écoute-le sur un ordinateur"; return; }
+      }
+      a.src = URL.createObjectURL(blob);
+      btn.replaceWith(a); a.play().catch(() => toast("Appuie sur ▶ pour écouter"));
+    } catch { btn.disabled = false; btn.textContent = "Ce vocal est abîmé et ne peut pas être lu"; }
   }
   // Visites
   const visits = new Map(); let visitES = null;
@@ -1185,7 +1224,8 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       };
     }
   }
-  setInterval(() => { if (unlocked) renderDash(); }, 30000); // « il y a … » reste juste
+  setInterval(() => { if (unlocked) renderDash(); }, 30000);
+  setInterval(() => { if (unlocked && !document.hidden) syncInbox(); }, 10 * 60e3); // « il y a … » reste juste
 
   async function syncInbox() {
     if (!privKey) return;
@@ -1198,12 +1238,12 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
       const t = await (await fetch(NTFY + "/json?poll=1&since=all", { cache: "no-store" })).text();
       for (const line of t.split("\n")) { if (!line.trim()) continue; const ev = JSON.parse(line); if (ev.event === "message") await addSealed(ev.id, ev.time, ev.message, relayVoice(ev)); }
     } catch {}
-    renderInbox();
+    renderInbox(); prefetchVoices();
     if (!replyES && window.EventSource) {
       replyES = new EventSource(NTFY + "/sse");
       replyES.onmessage = async (e) => {
         let ev; try { ev = JSON.parse(e.data); } catch { return; }
-        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message, relayVoice(ev))) { renderInbox(); hearts(30, innerWidth - 60, 60); toast(inbox.get(ev.id).data.voice ? "Nouveau message vocal !" : "Nouvelle réponse !"); }
+        if (ev.event === "message" && await addSealed(ev.id, ev.time, ev.message, relayVoice(ev))) { renderInbox(); prefetchVoices(); hearts(30, innerWidth - 60, 60); toast(inbox.get(ev.id).data.voice ? "Nouveau message vocal !" : "Nouvelle réponse !"); }
       };
     }
   }
