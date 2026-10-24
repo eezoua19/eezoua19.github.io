@@ -1,11 +1,11 @@
 {
-  "fromName": "Emmanuel ",
+  "fromName": "Chance ",
   "toName": "Andréa ",
   "title": "Toi + moi, bientôt ?",
   "intro": "Ça fait trop longtemps que je ne t'ai pas vue…\nAlors j'ai préparé ce petit billet rien que pour toi.",
   "question": "Tu veux qu'on se voie ?",
   "mood": "cerise",
-  "whatsapp": "+2250700590504",
+  "whatsapp": "",
   "music": "",
   "activities": [
     "🍿 Ciné",
@@ -36,7 +36,7 @@
     "BJw3IVBRoBjM",
     "CKL4P6XqiDEY"
   ],
-  "updatedAt": 1792705434473,
+  "updatedAt": 1792851855381,
   "adminMessage": {
     "text": "oui oui bébé tu as raison vraiment on a du mal a se parler ces deux jours la mais bon ça va le faire \nen journée on en parlera de la résidence et tout\nJe t'aime.",
     "at": 1792630581785
@@ -53,6 +53,19 @@
     "mqg0im": {
       "deleted": true,
       "updatedAt": 1792812446570
+    },
+    "utv4ro": {
+      "toName": "IRIS",
+      "title": "Toi + moi, bientôt ?",
+      "intro": "Tu m’ aime encore ?",
+      "question": "Oui ou Non ? ",
+      "mood": "cerise",
+      "activities": [],
+      "slots": [],
+      "confirmed": null,
+      "adminMessage": null,
+      "createdAt": 1792851659916,
+      "updatedAt": 1792851837721
     }
   }
 }
