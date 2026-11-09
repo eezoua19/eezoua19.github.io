@@ -77,9 +77,12 @@
         "Samedi soir"
       ],
       "confirmed": null,
-      "adminMessage": null,
+      "adminMessage": {
+        "text": "C'est noté bby, mais je crois que ce samedi après-midi on doit faire seulement une activité ou bien ?\non en parle sur Snap",
+        "at": 1794237061295
+      },
       "createdAt": 1794198633125,
-      "updatedAt": 1794198909418
+      "updatedAt": 1794237062497
     }
   }
 }
