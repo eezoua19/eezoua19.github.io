@@ -1,11 +1,11 @@
 {
-  "fromName": "Chance ",
+  "fromName": "Emmanuel ",
   "toName": "Andréa ",
   "title": "Toi + moi, bientôt ?",
   "intro": "Ça fait trop longtemps que je ne t'ai pas vue…\nAlors j'ai préparé ce petit billet rien que pour toi.",
   "question": "Tu veux qu'on se voie ?",
   "mood": "cerise",
-  "whatsapp": "",
+  "whatsapp": "0700590504",
   "music": "",
   "activities": [
     "🍿 Ciné",
@@ -36,7 +36,7 @@
     "BJw3IVBRoBjM",
     "CKL4P6XqiDEY"
   ],
-  "updatedAt": 1792851855381,
+  "updatedAt": 1794198738990,
   "adminMessage": {
     "text": "oui oui bébé tu as raison vraiment on a du mal a se parler ces deux jours la mais bon ça va le faire \nen journée on en parlera de la résidence et tout\nJe t'aime.",
     "at": 1792630581785
@@ -55,17 +55,31 @@
       "updatedAt": 1792812446570
     },
     "utv4ro": {
-      "toName": "IRIS",
+      "deleted": true,
+      "updatedAt": 1794198553851
+    },
+    "rugcbj": {
+      "toName": "Jade",
       "title": "Toi + moi, bientôt ?",
-      "intro": "Tu m’ aime encore ?",
-      "question": "Oui ou Non ? ",
+      "intro": "J'aimerais bien qu'on fasse un truc à deux ces temps-ci.\nAlors j'ai préparé ce petit billet rien que pour toi.",
+      "question": "Ça te va? ",
       "mood": "cerise",
-      "activities": [],
-      "slots": [],
+      "activities": [
+        "🍿 Ciné",
+        "🍜 Resto",
+        "🌙 Balade le soir",
+        "🧺 Pique-nique",
+        "🛋️ Une journée dans une résidence rien que nous deux"
+      ],
+      "slots": [
+        "Vendredi soir",
+        "Samedi après-midi",
+        "Samedi soir"
+      ],
       "confirmed": null,
       "adminMessage": null,
-      "createdAt": 1792851659916,
-      "updatedAt": 1792851837721
+      "createdAt": 1794198633125,
+      "updatedAt": 1794198909418
     }
   }
 }
